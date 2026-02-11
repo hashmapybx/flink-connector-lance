@@ -1,11 +1,7 @@
 /*
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
  *     http://www.apache.org/licenses/LICENSE-2.0
  *
@@ -15,7 +11,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.apache.flink.connector.lance.source;
 
 import org.apache.flink.core.io.SimpleVersionedSerializer;
@@ -33,45 +28,46 @@ import java.io.IOException;
  */
 public class LanceSourceSplitSerializer implements SimpleVersionedSerializer<LanceSourceSplit> {
 
-    public static final LanceSourceSplitSerializer INSTANCE = new LanceSourceSplitSerializer();
+  public static final LanceSourceSplitSerializer INSTANCE = new LanceSourceSplitSerializer();
 
-    private static final int CURRENT_VERSION = 1;
+  private static final int CURRENT_VERSION = 1;
 
-    private LanceSourceSplitSerializer() {
+  private LanceSourceSplitSerializer() {}
+
+  @Override
+  public int getVersion() {
+    return CURRENT_VERSION;
+  }
+
+  @Override
+  public byte[] serialize(LanceSourceSplit split) throws IOException {
+    ByteArrayOutputStream baos = new ByteArrayOutputStream();
+    DataOutputStream out = new DataOutputStream(baos);
+
+    out.writeInt(split.getFragmentId());
+    out.writeUTF(split.getDatasetPath());
+    out.writeLong(split.getRowCount());
+
+    out.flush();
+    return baos.toByteArray();
+  }
+
+  @Override
+  public LanceSourceSplit deserialize(int version, byte[] serialized) throws IOException {
+    if (version != CURRENT_VERSION) {
+      throw new IOException(
+          "Unsupported serialization version: "
+              + version
+              + ", current version: "
+              + CURRENT_VERSION);
     }
 
-    @Override
-    public int getVersion() {
-        return CURRENT_VERSION;
-    }
+    DataInputStream in = new DataInputStream(new ByteArrayInputStream(serialized));
 
-    @Override
-    public byte[] serialize(LanceSourceSplit split) throws IOException {
-        ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        DataOutputStream out = new DataOutputStream(baos);
+    int fragmentId = in.readInt();
+    String datasetPath = in.readUTF();
+    long rowCount = in.readLong();
 
-        out.writeInt(split.getFragmentId());
-        out.writeUTF(split.getDatasetPath());
-        out.writeLong(split.getRowCount());
-
-        out.flush();
-        return baos.toByteArray();
-    }
-
-    @Override
-    public LanceSourceSplit deserialize(int version, byte[] serialized) throws IOException {
-        if (version != CURRENT_VERSION) {
-            throw new IOException(
-                    "Unsupported serialization version: " + version
-                            + ", current version: " + CURRENT_VERSION);
-        }
-
-        DataInputStream in = new DataInputStream(new ByteArrayInputStream(serialized));
-
-        int fragmentId = in.readInt();
-        String datasetPath = in.readUTF();
-        long rowCount = in.readLong();
-
-        return new LanceSourceSplit(fragmentId, datasetPath, rowCount);
-    }
+    return new LanceSourceSplit(fragmentId, datasetPath, rowCount);
+  }
 }
