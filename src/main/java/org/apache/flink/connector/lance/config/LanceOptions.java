@@ -437,6 +437,55 @@ public class LanceOptions implements Serializable {
     return warehouse;
   }
 
+  // ==================== Sub-Options Conversion ====================
+
+  /** Convert to {@link LanceSourceOptions} for source-only usage. */
+  public LanceSourceOptions toSourceOptions() {
+    return LanceSourceOptions.builder()
+        .path(path)
+        .batchSize(readBatchSize)
+        .limit(readLimit)
+        .columns(readColumns)
+        .filter(readFilter)
+        .build();
+  }
+
+  /** Convert to {@link LanceSinkOptions} for sink-only usage. */
+  public LanceSinkOptions toSinkOptions() {
+    return LanceSinkOptions.builder()
+        .path(path)
+        .batchSize(writeBatchSize)
+        .writeMode(writeMode)
+        .maxRowsPerFile(writeMaxRowsPerFile)
+        .build();
+  }
+
+  /** Convert to {@link LanceIndexOptions} for index-building usage. */
+  public LanceIndexOptions toIndexOptions() {
+    return LanceIndexOptions.builder()
+        .columnName(indexColumn)
+        .indexType(indexType)
+        .metricType(vectorMetric)
+        .numPartitions(indexNumPartitions)
+        .numSubVectors(indexNumSubVectors)
+        .numBits(indexNumBits)
+        .maxLevel(indexMaxLevel)
+        .maxEdges(indexM)
+        .efConstruction(indexEfConstruction)
+        .build();
+  }
+
+  /** Convert to {@link LanceVectorSearchOptions} for vector-search usage. */
+  public LanceVectorSearchOptions toVectorSearchOptions() {
+    return LanceVectorSearchOptions.builder()
+        .columnName(vectorColumn)
+        .metricType(vectorMetric)
+        .nprobes(vectorNprobes)
+        .ef(vectorEf)
+        .refineFactor(vectorRefineFactor)
+        .build();
+  }
+
   // ==================== Builder ====================
 
   public static Builder builder() {

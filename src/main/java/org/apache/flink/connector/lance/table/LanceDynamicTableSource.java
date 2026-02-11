@@ -15,6 +15,7 @@ package org.apache.flink.connector.lance.table;
 
 import org.apache.flink.connector.lance.aggregate.AggregateInfo;
 import org.apache.flink.connector.lance.config.LanceOptions;
+import org.apache.flink.connector.lance.config.LanceSourceOptions;
 import org.apache.flink.connector.lance.source.LanceSource;
 import org.apache.flink.table.connector.ChangelogMode;
 import org.apache.flink.table.connector.source.DynamicTableSource;
@@ -516,5 +517,45 @@ public class LanceDynamicTableSource
   /** Whether aggregate push-down is accepted */
   public boolean isAggregatePushDownAccepted() {
     return aggregatePushDownAccepted;
+  }
+
+  // ==================== Handle ====================
+
+  /**
+   * Build an immutable {@link LanceSourceHandle} snapshot that captures all current push-down
+   * state. This handle can be used to transport push-down info to the runtime without exposing
+   * mutable fields.
+   */
+  public LanceSourceHandle getHandle() {
+    return LanceSourceHandle.builder()
+        .projectedFields(projectedFields)
+        .filters(new ArrayList<>(filters))
+        .limit(limit)
+        .aggregateInfo(aggregateInfo)
+        .build();
+  }
+
+  /**
+   * Build a {@link LanceSourceOptions} that merges push-down state into source-specific options.
+   * Useful for constructing the runtime Source without going through the full LanceOptions.
+   */
+  public LanceSourceOptions buildSourceOptions() {
+    RowType rowType = (RowType) physicalDataType.getLogicalType();
+    LanceSourceOptions.Builder builder =
+        options.toSourceOptions().toBuilder().filter(buildFilterExpression());
+
+    if (limit != null) {
+      builder.limit(limit);
+    }
+
+    if (projectedFields != null) {
+      List<String> columnNames =
+          Arrays.stream(projectedFields)
+              .mapToObj(i -> rowType.getFieldNames().get(i))
+              .collect(Collectors.toList());
+      builder.columns(columnNames);
+    }
+
+    return builder.build();
   }
 }
