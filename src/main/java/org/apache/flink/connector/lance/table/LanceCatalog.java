@@ -15,7 +15,11 @@ package org.apache.flink.connector.lance.table;
 
 import com.lancedb.lance.Dataset;
 import org.apache.arrow.memory.BufferAllocator;
-import org.apache.arrow.memory.RootAllocator;
+import org.apache.flink.connector.lance.catalog.LanceCatalogPathResolver;
+import org.apache.flink.connector.lance.catalog.LanceStorageProvider;
+import org.apache.flink.connector.lance.catalog.LocalStorageProvider;
+import org.apache.flink.connector.lance.catalog.RemoteStorageProvider;
+import org.apache.flink.connector.lance.catalog.StorageEnvironmentManager;
 import org.apache.flink.connector.lance.config.LanceDatasetFactory;
 import org.apache.flink.connector.lance.converter.LanceTypeConverter;
 import org.apache.flink.table.api.Schema;
@@ -49,23 +53,23 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.stream.Collectors;
 
 /**
  * Lance Catalog implementation.
  *
  * <p>Implements Flink Catalog interface, supports managing Lance datasets as Flink tables. Supports
  * local file system and S3 protocol object storage.
+ *
+ * <p>Storage-specific logic is delegated to {@link LanceStorageProvider} implementations:
+ *
+ * <ul>
+ *   <li>{@link LocalStorageProvider} — Local filesystem
+ *   <li>{@link RemoteStorageProvider} — S3/GCS/Azure object storage
+ * </ul>
  *
  * <p>Usage example (local path):
  *
@@ -96,14 +100,10 @@ public class LanceCatalog extends AbstractCatalog {
 
   public static final String DEFAULT_DATABASE = "default";
 
-  private final String warehouse;
+  private final LanceCatalogPathResolver pathResolver;
   private final Map<String, String> storageOptions;
-  private final boolean isRemoteStorage;
+  private final LanceStorageProvider storageProvider;
   private transient BufferAllocator allocator;
-
-  // Cache known databases and tables for remote storage
-  private final Set<String> knownDatabases = ConcurrentHashMap.newKeySet();
-  private final Set<String> knownTables = ConcurrentHashMap.newKeySet();
 
   /**
    * Create LanceCatalog (local storage)
@@ -127,73 +127,40 @@ public class LanceCatalog extends AbstractCatalog {
   public LanceCatalog(
       String name, String defaultDatabase, String warehouse, Map<String, String> storageOptions) {
     super(name, defaultDatabase);
-    this.warehouse = normalizeWarehousePath(warehouse);
+    this.pathResolver = new LanceCatalogPathResolver(warehouse);
     this.storageOptions =
         storageOptions != null ? new HashMap<>(storageOptions) : Collections.emptyMap();
-    this.isRemoteStorage = isRemotePath(warehouse);
+    this.storageProvider = createStorageProvider();
   }
 
-  /** Check if path is remote storage path */
-  private boolean isRemotePath(String path) {
-    if (path == null) {
-      return false;
+  /** Create the appropriate storage provider based on the warehouse path. */
+  private LanceStorageProvider createStorageProvider() {
+    if (pathResolver.isRemote()) {
+      return new RemoteStorageProvider(pathResolver, storageOptions);
+    } else {
+      return new LocalStorageProvider(pathResolver);
     }
-    String lowerPath = path.toLowerCase();
-    return lowerPath.startsWith("s3://")
-        || lowerPath.startsWith("s3a://")
-        || lowerPath.startsWith("gs://")
-        || lowerPath.startsWith("az://")
-        || lowerPath.startsWith("https://")
-        || lowerPath.startsWith("http://");
-  }
-
-  /** Normalize warehouse path */
-  private String normalizeWarehousePath(String path) {
-    if (path == null) {
-      return null;
-    }
-    // Remove trailing slashes
-    while (path.endsWith("/") && path.length() > 1) {
-      path = path.substring(0, path.length() - 1);
-    }
-    return path;
   }
 
   @Override
   public void open() throws CatalogException {
     LOG.info(
-        "Opening Lance Catalog: {}, warehouse path: {}," + " remote storage: {}",
+        "Opening Lance Catalog: {}, warehouse path: {}, remote storage: {}",
         getName(),
-        warehouse,
-        isRemoteStorage);
+        pathResolver.getWarehouse(),
+        pathResolver.isRemote());
 
-    this.allocator = new RootAllocator(Long.MAX_VALUE);
+    this.allocator = LanceDatasetFactory.createAllocator();
 
-    if (isRemoteStorage) {
-      // Remote storage: initialize default database record
-      knownDatabases.add(getDefaultDatabase());
-      LOG.info("Remote storage mode enabled, storage config count: {}", storageOptions.size());
-    } else {
-      // Local storage: ensure warehouse directory exists
-      Path warehousePath = Paths.get(warehouse);
-      if (!Files.exists(warehousePath)) {
-        try {
-          Files.createDirectories(warehousePath);
-        } catch (IOException e) {
-          throw new CatalogException("Cannot create warehouse directory: " + warehouse, e);
-        }
-      }
+    // For remote provider, set the allocator so it can probe dataset existence
+    if (storageProvider instanceof RemoteStorageProvider) {
+      ((RemoteStorageProvider) storageProvider).setAllocator(allocator);
+    }
 
-      // Ensure default database exists
-      Path defaultDbPath = warehousePath.resolve(getDefaultDatabase());
-      if (!Files.exists(defaultDbPath)) {
-        try {
-          Files.createDirectories(defaultDbPath);
-        } catch (IOException e) {
-          throw new CatalogException(
-              "Cannot create default database directory: " + defaultDbPath, e);
-        }
-      }
+    try {
+      storageProvider.initializeWarehouse(getDefaultDatabase());
+    } catch (IOException e) {
+      throw new CatalogException("Failed to initialize warehouse", e);
     }
   }
 
@@ -201,38 +168,20 @@ public class LanceCatalog extends AbstractCatalog {
   public void close() throws CatalogException {
     LOG.info("Closing Lance Catalog: {}", getName());
 
-    if (allocator != null) {
-      try {
-        allocator.close();
-      } catch (Exception e) {
-        LOG.warn("Failed to close allocator", e);
-      }
-      allocator = null;
-    }
+    LanceDatasetFactory.closeQuietly(allocator);
+    allocator = null;
 
-    knownDatabases.clear();
-    knownTables.clear();
+    if (storageProvider instanceof RemoteStorageProvider) {
+      ((RemoteStorageProvider) storageProvider).clear();
+    }
   }
 
   // ==================== Database Operations ====================
 
   @Override
   public List<String> listDatabases() throws CatalogException {
-    if (isRemoteStorage) {
-      // Remote storage: return known database list
-      return new ArrayList<>(knownDatabases);
-    }
-
     try {
-      Path warehousePath = Paths.get(warehouse);
-      if (!Files.exists(warehousePath)) {
-        return Collections.emptyList();
-      }
-
-      return Files.list(warehousePath)
-          .filter(Files::isDirectory)
-          .map(path -> path.getFileName().toString())
-          .collect(Collectors.toList());
+      return storageProvider.listDatabases();
     } catch (IOException e) {
       throw new CatalogException("Failed to list databases", e);
     }
@@ -250,41 +199,12 @@ public class LanceCatalog extends AbstractCatalog {
 
   @Override
   public boolean databaseExists(String databaseName) throws CatalogException {
-    if (isRemoteStorage) {
-      // Remote storage: check known databases or try listing tables to verify
-      if (knownDatabases.contains(databaseName)) {
-        return true;
-      }
-      // Try to confirm database exists by checking for tables
-      try {
-        String dbPath = getDatabasePath(databaseName);
-        // For remote storage, assume database always exists (actual table operations will verify)
-        return true;
-      } catch (Exception e) {
-        return false;
-      }
-    }
-
-    Path dbPath = Paths.get(warehouse, databaseName);
-    return Files.exists(dbPath) && Files.isDirectory(dbPath);
+    return storageProvider.databaseExists(databaseName);
   }
 
   @Override
   public void createDatabase(String name, CatalogDatabase database, boolean ignoreIfExists)
       throws DatabaseAlreadyExistException, CatalogException {
-    if (isRemoteStorage) {
-      // Remote storage: only record database name, actual directory created when creating table
-      if (knownDatabases.contains(name)) {
-        if (!ignoreIfExists) {
-          throw new DatabaseAlreadyExistException(getName(), name);
-        }
-        return;
-      }
-      knownDatabases.add(name);
-      LOG.info("Registered remote database: {}", name);
-      return;
-    }
-
     if (databaseExists(name)) {
       if (!ignoreIfExists) {
         throw new DatabaseAlreadyExistException(getName(), name);
@@ -292,9 +212,8 @@ public class LanceCatalog extends AbstractCatalog {
       return;
     }
 
-    Path dbPath = Paths.get(warehouse, name);
     try {
-      Files.createDirectories(dbPath);
+      storageProvider.createDatabase(name);
       LOG.info("Created database: {}", name);
     } catch (IOException e) {
       throw new CatalogException("Failed to create database: " + name, e);
@@ -304,22 +223,20 @@ public class LanceCatalog extends AbstractCatalog {
   @Override
   public void dropDatabase(String name, boolean ignoreIfNotExists, boolean cascade)
       throws DatabaseNotExistException, DatabaseNotEmptyException, CatalogException {
-    if (isRemoteStorage) {
-      // Remote storage: remove database record
-      if (!knownDatabases.contains(name)) {
-        if (!ignoreIfNotExists) {
-          throw new DatabaseNotExistException(getName(), name);
-        }
-        return;
+    if (!databaseExists(name)) {
+      if (!ignoreIfNotExists) {
+        throw new DatabaseNotExistException(getName(), name);
       }
+      return;
+    }
 
-      // Check if has tables
+    try {
       List<String> tables = listTables(name);
       if (!tables.isEmpty() && !cascade) {
         throw new DatabaseNotEmptyException(getName(), name);
       }
 
-      // If cascade, delete all tables
+      // If cascade, delete all tables first
       if (cascade) {
         for (String table : tables) {
           try {
@@ -330,30 +247,12 @@ public class LanceCatalog extends AbstractCatalog {
         }
       }
 
-      knownDatabases.remove(name);
-      LOG.info("Removed remote database record: {}", name);
-      return;
-    }
-
-    if (!databaseExists(name)) {
-      if (!ignoreIfNotExists) {
-        throw new DatabaseNotExistException(getName(), name);
-      }
-      return;
-    }
-
-    Path dbPath = Paths.get(warehouse, name);
-    try {
-      List<String> tables = listTables(name);
-      if (!tables.isEmpty() && !cascade) {
-        throw new DatabaseNotEmptyException(getName(), name);
-      }
-
-      // Delete database directory
-      deleteDirectory(dbPath);
-      LOG.info("Deleted database: {}", name);
+      storageProvider.dropDatabase(name, cascade);
+      LOG.info("Dropped database: {}", name);
+    } catch (DatabaseNotEmptyException e) {
+      throw e;
     } catch (IOException e) {
-      throw new CatalogException("Failed to delete database: " + name, e);
+      throw new CatalogException("Failed to drop database: " + name, e);
     }
   }
 
@@ -379,22 +278,8 @@ public class LanceCatalog extends AbstractCatalog {
       throw new DatabaseNotExistException(getName(), databaseName);
     }
 
-    if (isRemoteStorage) {
-      // Remote storage: return known table list
-      String prefix = databaseName + "/";
-      return knownTables.stream()
-          .filter(t -> t.startsWith(prefix))
-          .map(t -> t.substring(prefix.length()))
-          .collect(Collectors.toList());
-    }
-
     try {
-      Path dbPath = Paths.get(warehouse, databaseName);
-      return Files.list(dbPath)
-          .filter(Files::isDirectory)
-          .filter(path -> Files.exists(path.resolve("_versions"))) // Lance dataset identifier
-          .map(path -> path.getFileName().toString())
-          .collect(Collectors.toList());
+      return storageProvider.listTables(databaseName);
     } catch (IOException e) {
       throw new CatalogException("Failed to list tables", e);
     }
@@ -414,13 +299,11 @@ public class LanceCatalog extends AbstractCatalog {
       throw new TableNotExistException(getName(), tablePath);
     }
 
-    String datasetPath = getDatasetPath(tablePath);
+    String datasetPath =
+        pathResolver.resolveTablePath(tablePath.getDatabaseName(), tablePath.getObjectName());
 
     try {
-      // For remote storage, configure S3 credentials via environment variables
-      if (isRemoteStorage) {
-        configureStorageEnvironment();
-      }
+      storageProvider.configureEnvironment();
       Dataset dataset = LanceDatasetFactory.open(datasetPath, allocator);
 
       try {
@@ -440,8 +323,8 @@ public class LanceCatalog extends AbstractCatalog {
         options.put("path", datasetPath);
 
         // If remote storage, add storage config to table options
-        if (isRemoteStorage) {
-          options.putAll(getStorageOptionsForTable());
+        if (pathResolver.isRemote()) {
+          options.putAll(StorageEnvironmentManager.toTableOptions(storageOptions));
         }
 
         return CatalogTable.of(
@@ -463,32 +346,7 @@ public class LanceCatalog extends AbstractCatalog {
       return false;
     }
 
-    String datasetPath = getDatasetPath(tablePath);
-
-    if (isRemoteStorage) {
-      // Remote storage: check known tables or try opening dataset
-      String tableKey = tablePath.getDatabaseName() + "/" + tablePath.getObjectName();
-      if (knownTables.contains(tableKey)) {
-        return true;
-      }
-
-      // Try to open dataset to verify existence
-      try {
-        configureStorageEnvironment();
-        Dataset dataset = LanceDatasetFactory.open(datasetPath, allocator);
-        dataset.close();
-        knownTables.add(tableKey);
-        return true;
-      } catch (Exception e) {
-        LOG.debug("Table does not exist or cannot be accessed: {}", datasetPath, e);
-        return false;
-      }
-    }
-
-    Path path = Paths.get(datasetPath);
-
-    // Check if valid Lance dataset
-    return Files.exists(path) && Files.isDirectory(path) && Files.exists(path.resolve("_versions"));
+    return storageProvider.tableExists(tablePath.getDatabaseName(), tablePath.getObjectName());
   }
 
   @Override
@@ -501,26 +359,11 @@ public class LanceCatalog extends AbstractCatalog {
       return;
     }
 
-    String datasetPath = getDatasetPath(tablePath);
-
-    if (isRemoteStorage) {
-      // Remote storage: Lance Java SDK does not directly support deleting remote datasets
-      // Only remove record here, actual deletion requires cloud storage API
-      String tableKey = tablePath.getDatabaseName() + "/" + tablePath.getObjectName();
-      knownTables.remove(tableKey);
-      LOG.warn(
-          "Remote storage mode, table record removed,"
-              + " but actual data needs manual deletion"
-              + " from storage: {}",
-          datasetPath);
-      return;
-    }
-
     try {
-      deleteDirectory(Paths.get(datasetPath));
-      LOG.info("Deleted table: {}", tablePath);
+      storageProvider.dropTable(tablePath.getDatabaseName(), tablePath.getObjectName());
+      LOG.info("Dropped table: {}", tablePath);
     } catch (IOException e) {
-      throw new CatalogException("Failed to delete table: " + tablePath, e);
+      throw new CatalogException("Failed to drop table: " + tablePath, e);
     }
   }
 
@@ -539,17 +382,12 @@ public class LanceCatalog extends AbstractCatalog {
       throw new TableAlreadyExistException(getName(), newTablePath);
     }
 
-    if (isRemoteStorage) {
-      // Remote storage: does not support renaming
-      throw new CatalogException("Remote storage mode does not support renaming tables");
-    }
-
-    String oldPath = getDatasetPath(tablePath);
-    String newPath = getDatasetPath(newTablePath);
-
     try {
-      Files.move(Paths.get(oldPath), Paths.get(newPath));
+      storageProvider.renameTable(
+          tablePath.getDatabaseName(), tablePath.getObjectName(), newTableName);
       LOG.info("Renamed table: {} -> {}", tablePath, newTablePath);
+    } catch (UnsupportedOperationException e) {
+      throw new CatalogException(e.getMessage());
     } catch (IOException e) {
       throw new CatalogException("Failed to rename table: " + tablePath, e);
     }
@@ -569,14 +407,9 @@ public class LanceCatalog extends AbstractCatalog {
       return;
     }
 
-    if (isRemoteStorage) {
-      // Remote storage: record table info, actual creation on write
-      String tableKey = tablePath.getDatabaseName() + "/" + tablePath.getObjectName();
-      knownTables.add(tableKey);
-    }
+    storageProvider.registerTable(tablePath.getDatabaseName(), tablePath.getObjectName());
 
     // Actual table creation happens on first write
-    // Only record table metadata here
     LOG.info("Registered table: {} (actual dataset will be created on write)", tablePath);
   }
 
@@ -764,110 +597,11 @@ public class LanceCatalog extends AbstractCatalog {
     // Not supported
   }
 
-  // ==================== Utility Methods ====================
-
-  /**
-   * Configure storage environment variables (for S3 and other remote storage)
-   *
-   * <p>Lance configures S3 credentials via environment variables:
-   *
-   * <ul>
-   *   <li>AWS_ACCESS_KEY_ID - AWS access key ID
-   *   <li>AWS_SECRET_ACCESS_KEY - AWS secret access key
-   *   <li>AWS_DEFAULT_REGION - AWS region
-   *   <li>AWS_ENDPOINT - Custom endpoint URL (for S3-compatible storage)
-   * </ul>
-   */
-  private void configureStorageEnvironment() {
-    if (!isRemoteStorage || storageOptions.isEmpty()) {
-      return;
-    }
-
-    // Set environment variables for Lance SDK object_store configuration
-    // Note: Since Java cannot directly modify environment variables, system properties are used as
-    // fallback
-    // Lance's Rust backend will read these environment variables
-
-    if (storageOptions.containsKey("aws_access_key_id")) {
-      System.setProperty("AWS_ACCESS_KEY_ID", storageOptions.get("aws_access_key_id"));
-    }
-    if (storageOptions.containsKey("aws_secret_access_key")) {
-      System.setProperty("AWS_SECRET_ACCESS_KEY", storageOptions.get("aws_secret_access_key"));
-    }
-    if (storageOptions.containsKey("aws_region")) {
-      System.setProperty("AWS_DEFAULT_REGION", storageOptions.get("aws_region"));
-    }
-    if (storageOptions.containsKey("aws_endpoint")) {
-      System.setProperty("AWS_ENDPOINT", storageOptions.get("aws_endpoint"));
-    }
-    if (storageOptions.containsKey("aws_virtual_hosted_style_request")) {
-      System.setProperty(
-          "AWS_VIRTUAL_HOSTED_STYLE_REQUEST",
-          storageOptions.get("aws_virtual_hosted_style_request"));
-    }
-    if (storageOptions.containsKey("allow_http")) {
-      System.setProperty("AWS_ALLOW_HTTP", storageOptions.get("allow_http"));
-    }
-
-    LOG.debug("Configured remote storage environment variables");
-  }
-
-  /** Get database path */
-  private String getDatabasePath(String databaseName) {
-    if (isRemoteStorage) {
-      return warehouse + "/" + databaseName;
-    }
-    return Paths.get(warehouse, databaseName).toString();
-  }
-
-  /** Get dataset path */
-  private String getDatasetPath(ObjectPath tablePath) {
-    if (isRemoteStorage) {
-      return warehouse + "/" + tablePath.getDatabaseName() + "/" + tablePath.getObjectName();
-    }
-    return Paths.get(warehouse, tablePath.getDatabaseName(), tablePath.getObjectName()).toString();
-  }
-
-  /** Get storage options for table configuration */
-  private Map<String, String> getStorageOptionsForTable() {
-    Map<String, String> options = new HashMap<>();
-
-    // Convert storage options to table config format
-    if (storageOptions.containsKey("aws_access_key_id")) {
-      options.put("s3-access-key", storageOptions.get("aws_access_key_id"));
-    }
-    if (storageOptions.containsKey("aws_secret_access_key")) {
-      options.put("s3-secret-key", storageOptions.get("aws_secret_access_key"));
-    }
-    if (storageOptions.containsKey("aws_region")) {
-      options.put("s3-region", storageOptions.get("aws_region"));
-    }
-    if (storageOptions.containsKey("aws_endpoint")) {
-      options.put("s3-endpoint", storageOptions.get("aws_endpoint"));
-    }
-
-    return options;
-  }
-
-  /** Recursively delete directory */
-  private void deleteDirectory(Path path) throws IOException {
-    if (Files.isDirectory(path)) {
-      Files.list(path)
-          .forEach(
-              child -> {
-                try {
-                  deleteDirectory(child);
-                } catch (IOException e) {
-                  LOG.warn("Failed to delete file: {}", child, e);
-                }
-              });
-    }
-    Files.deleteIfExists(path);
-  }
+  // ==================== Accessor Methods ====================
 
   /** Get warehouse path */
   public String getWarehouse() {
-    return warehouse;
+    return pathResolver.getWarehouse();
   }
 
   /** Get storage configuration options */
@@ -877,6 +611,16 @@ public class LanceCatalog extends AbstractCatalog {
 
   /** Whether is remote storage */
   public boolean isRemoteStorage() {
-    return isRemoteStorage;
+    return pathResolver.isRemote();
+  }
+
+  /** Get the path resolver (for testing). */
+  public LanceCatalogPathResolver getPathResolver() {
+    return pathResolver;
+  }
+
+  /** Get the storage provider (for testing). */
+  public LanceStorageProvider getStorageProvider() {
+    return storageProvider;
   }
 }
