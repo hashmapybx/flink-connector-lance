@@ -18,24 +18,21 @@
 
 package org.apache.flink.connector.lance.table;
 
-import org.apache.flink.connector.lance.LanceSink;
 import org.apache.flink.connector.lance.config.LanceOptions;
-import org.apache.flink.streaming.api.datastream.DataStream;
-import org.apache.flink.streaming.api.datastream.DataStreamSink;
-import org.apache.flink.streaming.api.functions.sink.SinkFunction;
+import org.apache.flink.connector.lance.sink.LanceSink;
 import org.apache.flink.table.connector.ChangelogMode;
-import org.apache.flink.table.connector.sink.DataStreamSinkProvider;
 import org.apache.flink.table.connector.sink.DynamicTableSink;
-import org.apache.flink.table.connector.sink.SinkFunctionProvider;
+import org.apache.flink.table.connector.sink.SinkV2Provider;
 import org.apache.flink.table.data.RowData;
 import org.apache.flink.table.types.DataType;
 import org.apache.flink.table.types.logical.RowType;
 import org.apache.flink.types.RowKind;
 
 /**
- * Lance dynamic table sink.
+ * Lance dynamic table Sink.
  * 
- * <p>Implements DynamicTableSink interface, supports writing Flink data to Lance dataset.
+ * <p>Implements DynamicTableSink interface, writes Flink data to Lance Dataset using Sink V2 API (FLIP-143).
+ * <p>Provides runtime Sink through {@link SinkV2Provider}.
  */
 public class LanceDynamicTableSink implements DynamicTableSink {
 
@@ -59,10 +56,10 @@ public class LanceDynamicTableSink implements DynamicTableSink {
     public SinkRuntimeProvider getSinkRuntimeProvider(Context context) {
         RowType rowType = (RowType) physicalDataType.getLogicalType();
 
-        // Create LanceSink
+        // Use Sink V2 API (FLIP-143) SinkV2Provider
         LanceSink lanceSink = new LanceSink(options, rowType);
 
-        return SinkFunctionProvider.of(lanceSink);
+        return SinkV2Provider.of(lanceSink);
     }
 
     @Override

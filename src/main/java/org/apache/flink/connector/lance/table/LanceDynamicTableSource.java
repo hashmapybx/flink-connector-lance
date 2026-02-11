@@ -18,19 +18,14 @@
 
 package org.apache.flink.connector.lance.table;
 
-import org.apache.flink.api.common.typeinfo.TypeInformation;
-import org.apache.flink.connector.lance.LanceInputFormat;
-import org.apache.flink.connector.lance.LanceSource;
+import org.apache.flink.api.common.eventtime.WatermarkStrategy;
 import org.apache.flink.connector.lance.aggregate.AggregateInfo;
 import org.apache.flink.connector.lance.config.LanceOptions;
-import org.apache.flink.streaming.api.datastream.DataStream;
-import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
-import org.apache.flink.table.api.TableSchema;
+import org.apache.flink.connector.lance.source.LanceSource;
 import org.apache.flink.table.connector.ChangelogMode;
-import org.apache.flink.table.connector.source.DataStreamScanProvider;
 import org.apache.flink.table.connector.source.DynamicTableSource;
-import org.apache.flink.table.connector.source.InputFormatProvider;
 import org.apache.flink.table.connector.source.ScanTableSource;
+import org.apache.flink.table.connector.source.SourceProvider;
 import org.apache.flink.table.connector.source.abilities.SupportsAggregatePushDown;
 import org.apache.flink.table.connector.source.abilities.SupportsFilterPushDown;
 import org.apache.flink.table.connector.source.abilities.SupportsLimitPushDown;
@@ -44,9 +39,7 @@ import org.apache.flink.table.expressions.ValueLiteralExpression;
 import org.apache.flink.table.functions.BuiltInFunctionDefinitions;
 import org.apache.flink.table.functions.FunctionDefinition;
 import org.apache.flink.table.types.DataType;
-import org.apache.flink.table.types.logical.LogicalType;
 import org.apache.flink.table.types.logical.RowType;
-import org.apache.flink.types.RowKind;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -54,9 +47,10 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 /**
- * Lance dynamic table source.
+ * Lance dynamic table Source.
  * 
- * <p>Implements ScanTableSource interface, supports column pruning and filter push-down.
+ * <p>Implements ScanTableSource interface, supports column pruning, filter push-down, limit push-down and aggregate push-down.
+ * <p>Uses Source V2 API (FLIP-27), provides runtime Source through {@link SourceProvider}.
  */
 public class LanceDynamicTableSource implements ScanTableSource, 
         SupportsProjectionPushDown, SupportsFilterPushDown, SupportsLimitPushDown,
@@ -99,7 +93,7 @@ public class LanceDynamicTableSource implements ScanTableSource,
     public ScanRuntimeProvider getScanRuntimeProvider(ScanContext runtimeProviderContext) {
         RowType rowType = (RowType) physicalDataType.getLogicalType();
         
-        // If column pruning applied, build new RowType
+        // If column pruning was applied, build a new RowType
         RowType projectedRowType = rowType;
         if (projectedFields != null) {
             List<RowType.RowField> projectedFieldList = new ArrayList<>();
@@ -131,19 +125,9 @@ public class LanceDynamicTableSource implements ScanTableSource,
         LanceOptions finalOptions = optionsBuilder.build();
         final RowType finalRowType = projectedRowType;
 
-        // Use DataStreamScanProvider
-        return new DataStreamScanProvider() {
-            @Override
-            public DataStream<RowData> produceDataStream(StreamExecutionEnvironment execEnv) {
-                LanceSource source = new LanceSource(finalOptions, finalRowType);
-                return execEnv.addSource(source, "LanceSource");
-            }
-
-            @Override
-            public boolean isBounded() {
-                return true; // Lance dataset is bounded
-            }
-        };
+        // Use Source V2 API (FLIP-27) SourceProvider
+        LanceSource lanceSource = new LanceSource(finalOptions, finalRowType);
+        return SourceProvider.of(lanceSource);
     }
 
     @Override

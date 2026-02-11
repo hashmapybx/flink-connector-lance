@@ -16,16 +16,12 @@
  * limitations under the License.
  */
 
-package org.apache.flink.connector.lance;
+package org.apache.flink.connector.lance.sink;
 
-import org.apache.flink.configuration.Configuration;
+import org.apache.flink.api.connector.sink2.SinkWriter;
 import org.apache.flink.connector.lance.config.LanceOptions;
 import org.apache.flink.connector.lance.converter.LanceTypeConverter;
 import org.apache.flink.connector.lance.converter.RowDataConverter;
-import org.apache.flink.runtime.state.FunctionInitializationContext;
-import org.apache.flink.runtime.state.FunctionSnapshotContext;
-import org.apache.flink.streaming.api.checkpoint.CheckpointedFunction;
-import org.apache.flink.streaming.api.functions.sink.RichSinkFunction;
 import org.apache.flink.table.data.RowData;
 import org.apache.flink.table.types.logical.RowType;
 
@@ -51,32 +47,27 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * Lance Sink implementation.
- * 
- * <p>Writes Flink RowData to Lance dataset, supports batch writing and Checkpoint.
- * 
- * <p>Usage example:
- * <pre>{@code
- * LanceOptions options = LanceOptions.builder()
- *     .path("/path/to/lance/dataset")
- *     .writeBatchSize(1024)
- *     .writeMode(WriteMode.APPEND)
- *     .build();
- * 
- * LanceSink sink = new LanceSink(options, rowType);
- * dataStream.addSink(sink);
- * }</pre>
+ * Data writer for Lance Sink V2.
+ *
+ * <p>Receives Flink {@link RowData}, buffers them and writes to Lance Dataset when the batch size is reached.
+ *
+ * <p>Main responsibilities:
+ * <ul>
+ *   <li>Receive data and buffer</li>
+ *   <li>Auto flush when batch size is reached</li>
+ *   <li>Convert RowData to Arrow VectorSchemaRoot</li>
+ *   <li>Write to Lance Dataset via Fragment.create + FragmentOperation</li>
+ *   <li>Support APPEND and OVERWRITE write modes</li>
+ * </ul>
  */
-public class LanceSink extends RichSinkFunction<RowData> implements CheckpointedFunction {
+public class LanceSinkWriter implements SinkWriter<RowData> {
 
-    private static final long serialVersionUID = 1L;
-    private static final Logger LOG = LoggerFactory.getLogger(LanceSink.class);
+    private static final Logger LOG = LoggerFactory.getLogger(LanceSinkWriter.class);
 
     private final LanceOptions options;
     private final RowType rowType;
 
     private transient BufferAllocator allocator;
-    private transient Dataset dataset;
     private transient RowDataConverter converter;
     private transient Schema arrowSchema;
     private transient List<RowData> buffer;
@@ -85,105 +76,122 @@ public class LanceSink extends RichSinkFunction<RowData> implements Checkpointed
     private transient boolean isFirstWrite;
 
     /**
-     * Create LanceSink
+     * Create a LanceSinkWriter.
      *
      * @param options Lance configuration options
      * @param rowType Flink RowType
      */
-    public LanceSink(LanceOptions options, RowType rowType) {
+    public LanceSinkWriter(LanceOptions options, RowType rowType) {
         this.options = options;
         this.rowType = rowType;
+
+        initialize();
     }
 
-    @Override
-    public void open(Configuration parameters) throws Exception {
-        super.open(parameters);
-        
-        LOG.info("Opening Lance Sink: {}", options.getPath());
-        
+    /**
+     * Initialize writer resources.
+     */
+    private void initialize() {
+        LOG.info("Initializing LanceSinkWriter: {}", options.getPath());
+
         this.allocator = new RootAllocator(Long.MAX_VALUE);
         this.buffer = new ArrayList<>(options.getWriteBatchSize());
         this.totalWrittenRows = 0;
         this.isFirstWrite = true;
-        
-        // Initialize converter and Schema
+
+        // Initialize converter and schema
         this.converter = new RowDataConverter(rowType);
         this.arrowSchema = LanceTypeConverter.toArrowSchema(rowType);
-        
-        // Check if dataset exists
+
+        // Check dataset path
         String datasetPath = options.getPath();
         if (datasetPath == null || datasetPath.isEmpty()) {
-            throw new IllegalArgumentException("Lance dataset path cannot be empty");
+            throw new IllegalArgumentException("Lance dataset path must not be empty");
         }
-        
+
         Path path = Paths.get(datasetPath);
         this.datasetExists = Files.exists(path);
-        
-        // If overwrite mode and dataset exists, delete first
+
+        // If overwrite mode and dataset already exists, delete it first
         if (datasetExists && options.getWriteMode() == LanceOptions.WriteMode.OVERWRITE) {
             LOG.info("Overwrite mode, deleting existing dataset: {}", datasetPath);
-            deleteDirectory(path);
+            try {
+                deleteDirectory(path);
+            } catch (IOException e) {
+                throw new RuntimeException("Failed to delete existing dataset: " + datasetPath, e);
+            }
             this.datasetExists = false;
         }
-        
-        LOG.info("Lance Sink opened, Schema: {}", rowType);
+
+        LOG.info("LanceSinkWriter initialized, schema: {}", rowType);
     }
 
     @Override
-    public void invoke(RowData value, Context context) throws Exception {
-        buffer.add(value);
-        
-        // When buffer reaches batch size, execute write
+    public void write(RowData element, Context context) throws IOException, InterruptedException {
+        buffer.add(element);
+
+        // Flush when buffer reaches batch size
         if (buffer.size() >= options.getWriteBatchSize()) {
-            flush();
+            doFlush();
+        }
+    }
+
+    @Override
+    public void flush(boolean endOfInput) throws IOException, InterruptedException {
+        // Flush all buffered data on checkpoint or end of input
+        doFlush();
+
+        if (endOfInput) {
+            LOG.info("End of input, total rows written: {}", totalWrittenRows);
         }
     }
 
     /**
-     * Flush buffer, write data to Lance dataset
+     * Perform the actual flush operation, writing buffered data to Lance Dataset.
      */
-    public void flush() throws IOException {
+    private void doFlush() throws IOException {
         if (buffer.isEmpty()) {
             return;
         }
-        
+
         LOG.debug("Flushing buffer, row count: {}", buffer.size());
-        
+
         try (VectorSchemaRoot root = VectorSchemaRoot.create(arrowSchema, allocator)) {
             // Convert RowData to VectorSchemaRoot
             converter.toVectorSchemaRoot(buffer, root);
-            
+
             String datasetPath = options.getPath();
-            
-            // Build write parameters
+
+            // Build write params
             WriteParams writeParams = new WriteParams.Builder()
                     .withMaxRowsPerFile(options.getWriteMaxRowsPerFile())
                     .build();
-            
-            // Create Fragment
+
+            // Create fragments
             List<FragmentMetadata> fragments = Fragment.create(
                     datasetPath,
                     allocator,
                     root,
                     writeParams
             );
-            
-            if (!datasetExists) {
-                // Create new dataset (using Overwrite operation)
-                FragmentOperation.Overwrite overwrite = new FragmentOperation.Overwrite(fragments, arrowSchema);
-                dataset = overwrite.commit(allocator, datasetPath, Optional.empty(), Collections.emptyMap());
-                datasetExists = true;
-                isFirstWrite = false;
-                LOG.info("Created new dataset: {}", datasetPath);
+
+            Dataset dataset = null;
+            try {
+                if (!datasetExists) {
+                    // Create new dataset
+                    FragmentOperation.Overwrite overwrite = new FragmentOperation.Overwrite(fragments, arrowSchema);
+                    dataset = overwrite.commit(allocator, datasetPath, Optional.empty(), Collections.emptyMap());
+                    datasetExists = true;
+                    isFirstWrite = false;
+                    LOG.info("Created new dataset: {}", datasetPath);
                 } else {
-                    // Append data
                     if (isFirstWrite && options.getWriteMode() == LanceOptions.WriteMode.OVERWRITE) {
-                        // First write and overwrite mode
+                        // First write in overwrite mode
                         FragmentOperation.Overwrite overwrite = new FragmentOperation.Overwrite(fragments, arrowSchema);
                         dataset = overwrite.commit(allocator, datasetPath, Optional.empty(), Collections.emptyMap());
                         isFirstWrite = false;
                     } else {
-                        // Append mode: need to get current dataset version
+                        // Append mode: need to get the current dataset version
                         Dataset existingDataset = Dataset.open(datasetPath, allocator);
                         long readVersion;
                         try {
@@ -196,34 +204,36 @@ public class LanceSink extends RichSinkFunction<RowData> implements Checkpointed
                         dataset = append.commit(allocator, datasetPath, Optional.of(readVersion), Collections.emptyMap());
                     }
                 }
-            
-            totalWrittenRows += buffer.size();
-            LOG.debug("Written {} rows, total: {} rows", buffer.size(), totalWrittenRows);
-            
-            buffer.clear();
+
+                totalWrittenRows += buffer.size();
+                LOG.debug("Wrote {} rows, total: {} rows", buffer.size(), totalWrittenRows);
+
+                buffer.clear();
+            } finally {
+                if (dataset != null) {
+                    try {
+                        dataset.close();
+                    } catch (Exception e) {
+                    LOG.warn("Failed to close dataset", e);
+                    }
+                }
+            }
         } catch (Exception e) {
-            throw new IOException("Failed to write Lance dataset", e);
+            throw new IOException("Failed to write to Lance dataset", e);
         }
     }
 
     @Override
     public void close() throws Exception {
-        LOG.info("Closing Lance Sink");
+        LOG.info("Closing LanceSinkWriter");
+
         // Flush remaining data
         try {
-            flush();
+            doFlush();
         } catch (Exception e) {
             LOG.warn("Failed to flush data on close", e);
         }
-        if (dataset != null) {
-            try {
-                dataset.close();
-            } catch (Exception e) {
-                LOG.warn("Failed to close dataset", e);
-            }
-            dataset = null;
-        }
-        
+
         if (allocator != null) {
             try {
                 allocator.close();
@@ -232,49 +242,19 @@ public class LanceSink extends RichSinkFunction<RowData> implements Checkpointed
             }
             allocator = null;
         }
-        
-        LOG.info("Lance Sink closed, total written {} rows", totalWrittenRows);
-        
-        super.close();
-    }
 
-    @Override
-    public void snapshotState(FunctionSnapshotContext context) throws Exception {
-        LOG.debug("Snapshot state, checkpointId: {}", context.getCheckpointId());
-        
-        // Flush all buffered data at Checkpoint
-        flush();
-    }
-
-    @Override
-    public void initializeState(FunctionInitializationContext context) throws Exception {
-        LOG.debug("Initialize state, isRestored: {}", context.isRestored());
-        // State initialization (if recovery needed)
+        LOG.info("LanceSinkWriter closed, total rows written: {}", totalWrittenRows);
     }
 
     /**
-     * Get RowType
-     */
-    public RowType getRowType() {
-        return rowType;
-    }
-
-    /**
-     * Get configuration options
-     */
-    public LanceOptions getOptions() {
-        return options;
-    }
-
-    /**
-     * Get total written row count
+     * Get total written row count.
      */
     public long getTotalWrittenRows() {
         return totalWrittenRows;
     }
 
     /**
-     * Recursively delete directory
+     * Recursively delete a directory.
      */
     private void deleteDirectory(Path path) throws IOException {
         if (Files.isDirectory(path)) {
@@ -287,67 +267,5 @@ public class LanceSink extends RichSinkFunction<RowData> implements Checkpointed
             });
         }
         Files.deleteIfExists(path);
-    }
-
-    /**
-     * Builder pattern constructor
-     */
-    public static Builder builder() {
-        return new Builder();
-    }
-
-    /**
-     * LanceSink Builder
-     */
-    public static class Builder {
-        private String path;
-        private int batchSize = 1024;
-        private LanceOptions.WriteMode writeMode = LanceOptions.WriteMode.APPEND;
-        private int maxRowsPerFile = 1000000;
-        private RowType rowType;
-
-        public Builder path(String path) {
-            this.path = path;
-            return this;
-        }
-
-        public Builder batchSize(int batchSize) {
-            this.batchSize = batchSize;
-            return this;
-        }
-
-        public Builder writeMode(LanceOptions.WriteMode writeMode) {
-            this.writeMode = writeMode;
-            return this;
-        }
-
-        public Builder maxRowsPerFile(int maxRowsPerFile) {
-            this.maxRowsPerFile = maxRowsPerFile;
-            return this;
-        }
-
-        public Builder rowType(RowType rowType) {
-            this.rowType = rowType;
-            return this;
-        }
-
-        public LanceSink build() {
-            if (path == null || path.isEmpty()) {
-                throw new IllegalArgumentException("Dataset path cannot be empty");
-            }
-            
-            if (rowType == null) {
-                throw new IllegalArgumentException("RowType cannot be null");
-            }
-
-            LanceOptions options = LanceOptions.builder()
-                    .path(path)
-                    .writeBatchSize(batchSize)
-                    .writeMode(writeMode)
-                    .writeMaxRowsPerFile(maxRowsPerFile)
-                    .build();
-
-            return new LanceSink(options, rowType);
-        }
     }
 }
