@@ -25,6 +25,7 @@ import org.apache.arrow.vector.types.pojo.Schema;
 import org.apache.flink.api.common.io.RichInputFormat;
 import org.apache.flink.api.common.io.statistics.BaseStatistics;
 import org.apache.flink.configuration.Configuration;
+import org.apache.flink.connector.lance.config.LanceDatasetFactory;
 import org.apache.flink.connector.lance.config.LanceOptions;
 import org.apache.flink.connector.lance.converter.LanceTypeConverter;
 import org.apache.flink.connector.lance.converter.RowDataConverter;
@@ -98,26 +99,18 @@ public class LanceInputFormat extends RichInputFormat<RowData, LanceSplit> {
       throw new IOException("Dataset path cannot be empty");
     }
 
-    BufferAllocator tempAllocator = new RootAllocator(Long.MAX_VALUE);
-    try {
-      Dataset tempDataset = Dataset.open(datasetPath, tempAllocator);
-      try {
-        List<Fragment> fragments = tempDataset.getFragments();
-        LanceSplit[] splits = new LanceSplit[fragments.size()];
+    try (LanceDatasetFactory.ManagedDataset md = LanceDatasetFactory.openManaged(datasetPath)) {
+      List<Fragment> fragments = md.getDataset().getFragments();
+      LanceSplit[] splits = new LanceSplit[fragments.size()];
 
-        for (int i = 0; i < fragments.size(); i++) {
-          Fragment fragment = fragments.get(i);
-          long rowCount = fragment.countRows();
-          splits[i] = new LanceSplit(i, fragment.getId(), datasetPath, rowCount);
-        }
-
-        LOG.info("Created {} input splits", splits.length);
-        return splits;
-      } finally {
-        tempDataset.close();
+      for (int i = 0; i < fragments.size(); i++) {
+        Fragment fragment = fragments.get(i);
+        long rowCount = fragment.countRows();
+        splits[i] = new LanceSplit(i, fragment.getId(), datasetPath, rowCount);
       }
-    } finally {
-      tempAllocator.close();
+
+      LOG.info("Created {} input splits", splits.length);
+      return splits;
     }
   }
 
@@ -134,12 +127,7 @@ public class LanceInputFormat extends RichInputFormat<RowData, LanceSplit> {
     this.reachedEnd = false;
 
     // Open dataset
-    String datasetPath = split.getDatasetPath();
-    try {
-      this.dataset = Dataset.open(datasetPath, allocator);
-    } catch (Exception e) {
-      throw new IOException("Cannot open dataset: " + datasetPath, e);
-    }
+    this.dataset = LanceDatasetFactory.open(split.getDatasetPath(), allocator);
 
     // Initialize converter
     RowType actualRowType = this.rowType;

@@ -19,11 +19,11 @@ import com.lancedb.lance.ipc.LanceScanner;
 import com.lancedb.lance.ipc.Query;
 import com.lancedb.lance.ipc.ScanOptions;
 import org.apache.arrow.memory.BufferAllocator;
-import org.apache.arrow.memory.RootAllocator;
 import org.apache.arrow.vector.Float8Vector;
 import org.apache.arrow.vector.VectorSchemaRoot;
 import org.apache.arrow.vector.ipc.ArrowReader;
 import org.apache.arrow.vector.types.pojo.Schema;
+import org.apache.flink.connector.lance.config.LanceDatasetFactory;
 import org.apache.flink.connector.lance.config.LanceOptions;
 import org.apache.flink.connector.lance.config.LanceOptions.MetricType;
 import org.apache.flink.connector.lance.converter.LanceTypeConverter;
@@ -89,10 +89,10 @@ public class LanceVectorSearch implements Closeable, Serializable {
   public void open() throws IOException {
     LOG.info("Opening vector search, dataset: {}", datasetPath);
 
-    this.allocator = new RootAllocator(Long.MAX_VALUE);
+    this.allocator = LanceDatasetFactory.createAllocator();
 
     try {
-      this.dataset = Dataset.open(datasetPath, allocator);
+      this.dataset = LanceDatasetFactory.open(datasetPath, allocator);
 
       // Get Schema and create converter
       Schema arrowSchema = dataset.getSchema();

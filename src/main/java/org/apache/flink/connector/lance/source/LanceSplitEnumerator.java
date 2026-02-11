@@ -16,9 +16,9 @@ package org.apache.flink.connector.lance.source;
 import com.lancedb.lance.Dataset;
 import com.lancedb.lance.Fragment;
 import org.apache.arrow.memory.BufferAllocator;
-import org.apache.arrow.memory.RootAllocator;
 import org.apache.flink.api.connector.source.SplitEnumerator;
 import org.apache.flink.api.connector.source.SplitEnumeratorContext;
+import org.apache.flink.connector.lance.config.LanceDatasetFactory;
 import org.apache.flink.connector.lance.config.LanceOptions;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -108,13 +108,11 @@ public class LanceSplitEnumerator
     LOG.info("Starting to discover Lance Dataset Fragments...");
 
     String datasetPath = options.getPath();
-    if (datasetPath == null || datasetPath.isEmpty()) {
-      throw new RuntimeException("Lance dataset path must not be empty");
-    }
+    LanceDatasetFactory.validatePath(datasetPath);
 
-    BufferAllocator allocator = new RootAllocator(Long.MAX_VALUE);
+    BufferAllocator allocator = LanceDatasetFactory.createAllocator();
     try {
-      Dataset dataset = Dataset.open(datasetPath, allocator);
+      Dataset dataset = LanceDatasetFactory.open(datasetPath, allocator);
       try {
         List<Fragment> fragments = dataset.getFragments();
         List<LanceSourceSplit> splits = new ArrayList<>(fragments.size());
@@ -133,7 +131,7 @@ public class LanceSplitEnumerator
       } finally {
         dataset.close();
       }
-    } catch (Exception e) {
+    } catch (IOException e) {
       throw new RuntimeException("Unable to open Lance Dataset: " + datasetPath, e);
     } finally {
       allocator.close();

@@ -23,6 +23,7 @@ import org.apache.arrow.memory.RootAllocator;
 import org.apache.arrow.vector.VectorSchemaRoot;
 import org.apache.arrow.vector.types.pojo.Schema;
 import org.apache.flink.configuration.Configuration;
+import org.apache.flink.connector.lance.config.LanceDatasetFactory;
 import org.apache.flink.connector.lance.config.LanceOptions;
 import org.apache.flink.connector.lance.converter.LanceTypeConverter;
 import org.apache.flink.connector.lance.converter.RowDataConverter;
@@ -175,7 +176,7 @@ public class LanceSink extends RichSinkFunction<RowData> implements Checkpointed
           isFirstWrite = false;
         } else {
           // Append mode: need to get current dataset version
-          Dataset existingDataset = Dataset.open(datasetPath, allocator);
+          Dataset existingDataset = LanceDatasetFactory.open(datasetPath, allocator);
           long readVersion;
           try {
             readVersion = existingDataset.version();

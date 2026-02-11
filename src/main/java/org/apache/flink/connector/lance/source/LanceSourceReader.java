@@ -25,6 +25,7 @@ import org.apache.arrow.vector.types.pojo.Schema;
 import org.apache.flink.api.connector.source.ReaderOutput;
 import org.apache.flink.api.connector.source.SourceReader;
 import org.apache.flink.api.connector.source.SourceReaderContext;
+import org.apache.flink.connector.lance.config.LanceDatasetFactory;
 import org.apache.flink.connector.lance.config.LanceOptions;
 import org.apache.flink.connector.lance.converter.LanceTypeConverter;
 import org.apache.flink.connector.lance.converter.RowDataConverter;
@@ -189,7 +190,7 @@ public class LanceSourceReader implements SourceReader<RowData, LanceSourceSplit
 
       // Open Dataset
       String datasetPath = split.getDatasetPath();
-      currentDataset = Dataset.open(datasetPath, allocator);
+      currentDataset = LanceDatasetFactory.open(datasetPath, allocator);
 
       // Initialize converter (if not already initialized)
       if (converter == null) {

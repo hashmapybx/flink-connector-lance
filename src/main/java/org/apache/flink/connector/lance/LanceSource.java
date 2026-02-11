@@ -23,6 +23,7 @@ import org.apache.arrow.vector.VectorSchemaRoot;
 import org.apache.arrow.vector.ipc.ArrowReader;
 import org.apache.arrow.vector.types.pojo.Schema;
 import org.apache.flink.configuration.Configuration;
+import org.apache.flink.connector.lance.config.LanceDatasetFactory;
 import org.apache.flink.connector.lance.config.LanceOptions;
 import org.apache.flink.connector.lance.converter.LanceTypeConverter;
 import org.apache.flink.connector.lance.converter.RowDataConverter;
@@ -32,9 +33,6 @@ import org.apache.flink.table.types.logical.RowType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.IOException;
-import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.Arrays;
 import java.util.List;
 
@@ -113,17 +111,7 @@ public class LanceSource extends RichParallelSourceFunction<RowData> {
     this.allocator = new RootAllocator(Long.MAX_VALUE);
 
     // Open Lance dataset
-    String datasetPath = options.getPath();
-    if (datasetPath == null || datasetPath.isEmpty()) {
-      throw new IllegalArgumentException("Lance dataset path cannot be empty");
-    }
-
-    Path path = Paths.get(datasetPath);
-    try {
-      this.dataset = Dataset.open(path.toString(), allocator);
-    } catch (Exception e) {
-      throw new IOException("Cannot open Lance dataset: " + datasetPath, e);
-    }
+    this.dataset = LanceDatasetFactory.open(options.getPath(), allocator);
 
     // Initialize RowDataConverter
     RowType actualRowType = this.rowType;

@@ -22,7 +22,7 @@ import com.lancedb.lance.index.vector.IvfBuildParams;
 import com.lancedb.lance.index.vector.PQBuildParams;
 import com.lancedb.lance.index.vector.VectorIndexParams;
 import org.apache.arrow.memory.BufferAllocator;
-import org.apache.arrow.memory.RootAllocator;
+import org.apache.flink.connector.lance.config.LanceDatasetFactory;
 import org.apache.flink.connector.lance.config.LanceOptions;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -102,8 +102,8 @@ public class LanceIndexBuilder implements Closeable, Serializable {
 
     try {
       // Initialize resources
-      this.allocator = new RootAllocator(Long.MAX_VALUE);
-      this.dataset = Dataset.open(datasetPath, allocator);
+      this.allocator = LanceDatasetFactory.createAllocator();
+      this.dataset = LanceDatasetFactory.open(datasetPath, allocator);
 
       // Validate column exists
       validateColumn();
