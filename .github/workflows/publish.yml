@@ -1,0 +1,133 @@
+
+name: Publish Flink packages
+on:
+  release:
+    types: [published]
+  pull_request:
+    paths:
+      - .github/workflows/publish.yml
+    types:
+      - opened
+      - synchronize
+      - ready_for_review
+      - reopened
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'Release mode'
+        required: true
+        type: choice
+        default: dry_run
+        options:
+          - dry_run
+          - release
+      ref:
+        description: 'The branch, tag or SHA to checkout'
+        required: false
+        type: string
+
+jobs:
+  release:
+    name: Release Flink
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name || inputs.ref }}
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: corretto
+          java-version: 17
+          cache: "maven"
+          server-id: ossrh
+          server-username: SONATYPE_USER
+          server-password: SONATYPE_TOKEN
+          gpg-private-key: ${{ secrets.GPG_PRIVATE_KEY }}
+          gpg-passphrase: ${{ secrets.GPG_PASSPHRASE }}
+      - name: Set github
+        run: |
+          git config --global user.email "Lance Github Runner"
+          git config --global user.name "dev+gha@lancedb.com"
+      - name: Dry run
+        if: |
+          github.event_name == 'pull_request' ||
+          inputs.mode == 'dry_run'
+        run: |
+          ./mvnw --batch-mode -DskipTests package
+      - name: Publish to Maven Central
+        if: |
+          github.event_name == 'release' ||
+          inputs.mode == 'release'
+        run: |
+          echo "use-agent" >> ~/.gnupg/gpg.conf
+          echo "pinentry-mode loopback" >> ~/.gnupg/gpg.conf
+          export GPG_TTY=$(tty)
+          ./mvnw --batch-mode -DskipTests -DpushChanges=false -Dgpg.passphrase=${{ secrets.GPG_PASSPHRASE }} deploy -P deploy-to-ossrh
+        env:
+          SONATYPE_USER: ${{ secrets.SONATYPE_USER }}
+          SONATYPE_TOKEN: ${{ secrets.SONATYPE_TOKEN }}
+
+      - name: Get published version
+        if: |
+          github.event_name == 'release' ||
+          inputs.mode == 'release'
+        id: get_version
+        run: |
+          VERSION=$(./mvnw help:evaluate -Dexpression=project.version -q -DforceStdout)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Published version: $VERSION"
+
+      - name: Wait for Maven Central availability
+        if: |
+          github.event_name == 'release' ||
+          inputs.mode == 'release'
+        run: |
+          VERSION="${{ steps.get_version.outputs.version }}"
+          GROUP_ID="org.lance"
+          ARTIFACT_ID="lance-flink"
+
+          echo "Waiting for version $VERSION to be available in Maven Central..."
+          echo "This typically takes 10-30 minutes after publishing to OSSRH."
+
+          # Maximum wait time: 60 minutes
+          MAX_WAIT=3600
+          INTERVAL=60
+          ELAPSED=0
+
+          while [ $ELAPSED -lt $MAX_WAIT ]; do
+            URL="https://repo1.maven.org/maven2/org/lance/${ARTIFACT_ID}/${VERSION}/${ARTIFACT_ID}-${VERSION}.pom"
+
+            if curl --head --silent --fail "$URL" > /dev/null 2>&1; then
+              echo ""
+              echo "🎉 Artifact is now available in Maven Central!"
+              echo ""
+              echo "Users can now add the following dependency:"
+              echo ""
+              echo "Maven:"
+              echo "<dependency>"
+              echo "  <groupId>org.lance</groupId>"
+              echo "  <artifactId>lance-flink</artifactId>"
+              echo "  <version>${VERSION}</version>"
+              echo "</dependency>"
+              echo ""
+              echo "Gradle:"
+              echo "implementation 'org.lance:lance-flink:${VERSION}'"
+              exit 0
+            fi
+
+            ELAPSED=$((ELAPSED + INTERVAL))
+
+            if [ $ELAPSED -lt $MAX_WAIT ]; then
+              echo "Artifact not yet available. Waiting ${INTERVAL} seconds... (${ELAPSED}s elapsed)"
+              sleep $INTERVAL
+            fi
+          done
+
+          echo ""
+          echo "⚠️ WARNING: Artifact not yet available in Maven Central after ${MAX_WAIT} seconds."
+          echo "This is normal - Maven Central sync can take up to 2 hours."
+          echo "Check status at: https://central.sonatype.com/artifact/org.lance/lance-flink/${VERSION}"
+          exit 0
