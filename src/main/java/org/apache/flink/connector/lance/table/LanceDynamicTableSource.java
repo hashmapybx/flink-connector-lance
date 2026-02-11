@@ -240,11 +240,41 @@ public class LanceDynamicTableSource
     else if (funcDef == BuiltInFunctionDefinitions.LIKE) {
       return buildComparisonFilter(args, "LIKE");
     }
-    // IN (not supported yet, requires more complex handling)
+    // IN
+    else if (funcDef == BuiltInFunctionDefinitions.IN) {
+      return buildInFilter(args);
+    }
     // BETWEEN (not supported yet)
 
     // Unsupported functions, return null
     return null;
+  }
+
+  /**
+   * Build IN filter expression. The first argument is the field reference, and the remaining
+   * arguments are the values. Generates: fieldName IN ('v1', 'v2', 'v3')
+   */
+  private String buildInFilter(List<ResolvedExpression> args) {
+    if (args.size() < 2) {
+      return null;
+    }
+    // First argument must be a field reference
+    if (!(args.get(0) instanceof FieldReferenceExpression)) {
+      return null;
+    }
+    String fieldName = ((FieldReferenceExpression) args.get(0)).getName();
+
+    // Remaining arguments are values
+    List<String> values = new ArrayList<>();
+    for (int i = 1; i < args.size(); i++) {
+      String val = extractLiteralValue(args.get(i));
+      if (val == null) {
+        return null;
+      }
+      values.add(val);
+    }
+
+    return fieldName + " IN (" + String.join(", ", values) + ")";
   }
 
   /** Build comparison filter expression */
