@@ -133,6 +133,30 @@ public class LanceDynamicTableFactory
           .defaultValue(20)
           .withDescription("IVF search probe count");
 
+  public static final ConfigOption<String> S3_ACCESS_KEY =
+      ConfigOptions.key("s3-access-key")
+          .stringType()
+          .noDefaultValue()
+          .withDescription("S3 Access Key ID (injected by Catalog)");
+
+  public static final ConfigOption<String> S3_SECRET_KEY =
+      ConfigOptions.key("s3-secret-key")
+          .stringType()
+          .noDefaultValue()
+          .withDescription("S3 Secret Access Key (injected by Catalog)");
+
+  public static final ConfigOption<String> S3_REGION =
+      ConfigOptions.key("s3-region")
+          .stringType()
+          .noDefaultValue()
+          .withDescription("S3 Region (injected by Catalog)");
+
+  public static final ConfigOption<String> S3_ENDPOINT =
+      ConfigOptions.key("s3-endpoint")
+          .stringType()
+          .noDefaultValue()
+          .withDescription("S3 Endpoint URL (injected by Catalog)");
+
   @Override
   public String factoryIdentifier() {
     return IDENTIFIER;
@@ -140,14 +164,14 @@ public class LanceDynamicTableFactory
 
   @Override
   public Set<ConfigOption<?>> requiredOptions() {
-    Set<ConfigOption<?>> options = new HashSet<>();
-    options.add(PATH);
-    return options;
+    // No required options — when used via Catalog, path is injected automatically
+    return new HashSet<>();
   }
 
   @Override
   public Set<ConfigOption<?>> optionalOptions() {
     Set<ConfigOption<?>> options = new HashSet<>();
+    options.add(PATH);
     options.add(READ_BATCH_SIZE);
     options.add(READ_COLUMNS);
     options.add(READ_FILTER);
@@ -161,6 +185,11 @@ public class LanceDynamicTableFactory
     options.add(VECTOR_COLUMN);
     options.add(VECTOR_METRIC);
     options.add(VECTOR_NPROBES);
+    // S3 options (injected by Catalog when using remote storage)
+    options.add(S3_ACCESS_KEY);
+    options.add(S3_SECRET_KEY);
+    options.add(S3_REGION);
+    options.add(S3_ENDPOINT);
     return options;
   }
 
@@ -193,7 +222,7 @@ public class LanceDynamicTableFactory
     LanceOptions.Builder builder = LanceOptions.builder();
 
     // Common configuration
-    builder.path(config.get(PATH));
+    config.getOptional(PATH).ifPresent(builder::path);
 
     // Source configuration
     builder.readBatchSize(config.get(READ_BATCH_SIZE));

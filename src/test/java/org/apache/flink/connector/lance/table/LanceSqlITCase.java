@@ -15,6 +15,12 @@ package org.apache.flink.connector.lance.table;
 
 import org.apache.flink.connector.lance.config.LanceOptions;
 import org.apache.flink.table.api.DataTypes;
+import org.apache.flink.table.api.Schema;
+import org.apache.flink.table.catalog.CatalogBaseTable;
+import org.apache.flink.table.catalog.CatalogTable;
+import org.apache.flink.table.catalog.ObjectPath;
+import org.apache.flink.table.catalog.exceptions.TableAlreadyExistException;
+import org.apache.flink.table.catalog.exceptions.TableNotExistException;
 import org.apache.flink.table.types.DataType;
 import org.apache.flink.table.types.logical.ArrayType;
 import org.apache.flink.table.types.logical.BigIntType;
@@ -28,6 +34,7 @@ import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -35,6 +42,7 @@ import java.util.Map;
 import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /** Lance SQL integration tests. */
 class LanceSqlITCase {
@@ -58,13 +66,14 @@ class LanceSqlITCase {
   }
 
   @Test
-  @DisplayName("Test LanceDynamicTableFactory required options")
+  @DisplayName("Test LanceDynamicTableFactory required options - path is now optional")
   void testRequiredOptions() {
     LanceDynamicTableFactory factory = new LanceDynamicTableFactory();
     Set<String> requiredOptionKeys = new HashSet<>();
     factory.requiredOptions().forEach(opt -> requiredOptionKeys.add(opt.key()));
 
-    assertThat(requiredOptionKeys).contains("path");
+    // path is no longer required (Catalog mode injects it automatically)
+    assertThat(requiredOptionKeys).isEmpty();
   }
 
   @Test
@@ -76,6 +85,7 @@ class LanceSqlITCase {
 
     assertThat(optionalOptionKeys)
         .contains(
+            "path",
             "read.batch-size",
             "read.columns",
             "read.filter",
@@ -85,7 +95,11 @@ class LanceSqlITCase {
             "index.type",
             "index.column",
             "vector.column",
-            "vector.metric");
+            "vector.metric",
+            "s3-access-key",
+            "s3-secret-key",
+            "s3-region",
+            "s3-endpoint");
   }
 
   @Test
@@ -320,5 +334,229 @@ class LanceSqlITCase {
   void testVectorSearchFunctionConfiguration() {
     LanceVectorSearchFunction function = new LanceVectorSearchFunction();
     assertThat(function).isNotNull();
+  }
+
+  // ==================== CREATE TABLE with Namespace Integration Tests ====================
+
+  @Test
+  @DisplayName("Test CREATE TABLE via Catalog creates empty Lance Dataset")
+  void testCreateTableViaCatalogCreatesDataset() throws Exception {
+    LanceCatalog catalog = new LanceCatalog("test_catalog", "default", warehousePath);
+
+    try {
+      catalog.open();
+
+      // Build a CatalogTable with schema
+      Schema schema =
+          Schema.newBuilder()
+              .column("id", DataTypes.BIGINT())
+              .column("name", DataTypes.STRING())
+              .column("score", DataTypes.DOUBLE())
+              .build();
+      CatalogTable catalogTable =
+          CatalogTable.of(schema, "test table", Collections.emptyList(), Collections.emptyMap());
+
+      ObjectPath tablePath = new ObjectPath("default", "users");
+
+      // Create table
+      catalog.createTable(tablePath, catalogTable, false);
+
+      // Table should now exist
+      assertThat(catalog.tableExists(tablePath)).isTrue();
+
+      // Should appear in listTables
+      List<String> tables = catalog.listTables("default");
+      assertThat(tables).contains("users");
+
+      // getTable should return valid CatalogTable with correct schema
+      CatalogBaseTable retrievedTable = catalog.getTable(tablePath);
+      assertThat(retrievedTable).isInstanceOf(CatalogTable.class);
+
+      // Verify the returned table has correct options
+      Map<String, String> options = retrievedTable.getOptions();
+      assertThat(options).containsKey("connector");
+      assertThat(options.get("connector")).isEqualTo("lance");
+      assertThat(options).containsKey("path");
+
+    } finally {
+      catalog.close();
+    }
+  }
+
+  @Test
+  @DisplayName("Test CREATE TABLE via Catalog preserves user options")
+  void testCreateTablePreservesUserOptions() throws Exception {
+    LanceCatalog catalog = new LanceCatalog("test_catalog", "default", warehousePath);
+
+    try {
+      catalog.open();
+
+      Schema schema =
+          Schema.newBuilder()
+              .column("id", DataTypes.BIGINT())
+              .column("value", DataTypes.STRING())
+              .build();
+
+      Map<String, String> userOptions = new HashMap<>();
+      userOptions.put("write.batch-size", "256");
+      userOptions.put("write.mode", "overwrite");
+
+      CatalogTable catalogTable =
+          CatalogTable.of(schema, "test table", Collections.emptyList(), userOptions);
+
+      ObjectPath tablePath = new ObjectPath("default", "my_table");
+      catalog.createTable(tablePath, catalogTable, false);
+
+      // getTable should return merged options
+      CatalogBaseTable retrievedTable = catalog.getTable(tablePath);
+      Map<String, String> options = retrievedTable.getOptions();
+      assertThat(options.get("write.batch-size")).isEqualTo("256");
+      assertThat(options.get("write.mode")).isEqualTo("overwrite");
+      // Connector and path should be set by catalog
+      assertThat(options.get("connector")).isEqualTo("lance");
+      assertThat(options).containsKey("path");
+
+    } finally {
+      catalog.close();
+    }
+  }
+
+  @Test
+  @DisplayName("Test CREATE TABLE twice throws TableAlreadyExistException")
+  void testCreateTableDuplicate() throws Exception {
+    LanceCatalog catalog = new LanceCatalog("test_catalog", "default", warehousePath);
+
+    try {
+      catalog.open();
+
+      Schema schema = Schema.newBuilder().column("id", DataTypes.BIGINT()).build();
+      CatalogTable catalogTable =
+          CatalogTable.of(schema, "test", Collections.emptyList(), Collections.emptyMap());
+
+      ObjectPath tablePath = new ObjectPath("default", "dup_table");
+      catalog.createTable(tablePath, catalogTable, false);
+
+      // Second create should throw
+      assertThatThrownBy(() -> catalog.createTable(tablePath, catalogTable, false))
+          .isInstanceOf(TableAlreadyExistException.class);
+
+      // With ignoreIfExists=true, should not throw
+      catalog.createTable(tablePath, catalogTable, true);
+
+    } finally {
+      catalog.close();
+    }
+  }
+
+  @Test
+  @DisplayName("Test DROP TABLE after CREATE TABLE")
+  void testDropTableAfterCreate() throws Exception {
+    LanceCatalog catalog = new LanceCatalog("test_catalog", "default", warehousePath);
+
+    try {
+      catalog.open();
+
+      Schema schema =
+          Schema.newBuilder()
+              .column("id", DataTypes.BIGINT())
+              .column("name", DataTypes.STRING())
+              .build();
+      CatalogTable catalogTable =
+          CatalogTable.of(schema, "drop test", Collections.emptyList(), Collections.emptyMap());
+
+      ObjectPath tablePath = new ObjectPath("default", "to_drop");
+      catalog.createTable(tablePath, catalogTable, false);
+      assertThat(catalog.tableExists(tablePath)).isTrue();
+
+      // Drop table
+      catalog.dropTable(tablePath, false);
+      assertThat(catalog.tableExists(tablePath)).isFalse();
+
+      // Drop again should throw
+      assertThatThrownBy(() -> catalog.dropTable(tablePath, false))
+          .isInstanceOf(TableNotExistException.class);
+
+    } finally {
+      catalog.close();
+    }
+  }
+
+  @Test
+  @DisplayName("Test CREATE TABLE with vector column")
+  void testCreateTableWithVectorColumn() throws Exception {
+    LanceCatalog catalog = new LanceCatalog("test_catalog", "default", warehousePath);
+
+    try {
+      catalog.open();
+
+      Schema schema =
+          Schema.newBuilder()
+              .column("id", DataTypes.BIGINT())
+              .column("content", DataTypes.STRING())
+              .column("embedding", DataTypes.ARRAY(DataTypes.FLOAT()))
+              .build();
+      CatalogTable catalogTable =
+          CatalogTable.of(schema, "vector table", Collections.emptyList(), Collections.emptyMap());
+
+      ObjectPath tablePath = new ObjectPath("default", "vector_table");
+      catalog.createTable(tablePath, catalogTable, false);
+
+      assertThat(catalog.tableExists(tablePath)).isTrue();
+
+      // Verify schema round-trip
+      CatalogBaseTable retrieved = catalog.getTable(tablePath);
+      assertThat(retrieved).isInstanceOf(CatalogTable.class);
+
+    } finally {
+      catalog.close();
+    }
+  }
+
+  @Test
+  @DisplayName("Test CREATE TABLE in non-default database")
+  void testCreateTableInCustomDatabase() throws Exception {
+    LanceCatalog catalog = new LanceCatalog("test_catalog", "default", warehousePath);
+
+    try {
+      catalog.open();
+
+      // Create a custom database first
+      catalog.createDatabase("mydb", null, false);
+
+      Schema schema =
+          Schema.newBuilder()
+              .column("id", DataTypes.BIGINT())
+              .column("data", DataTypes.STRING())
+              .build();
+      CatalogTable catalogTable =
+          CatalogTable.of(
+              schema, "custom db table", Collections.emptyList(), Collections.emptyMap());
+
+      ObjectPath tablePath = new ObjectPath("mydb", "my_table");
+      catalog.createTable(tablePath, catalogTable, false);
+
+      assertThat(catalog.tableExists(tablePath)).isTrue();
+      assertThat(catalog.listTables("mydb")).contains("my_table");
+
+      // Verify path contains database name
+      CatalogBaseTable retrieved = catalog.getTable(tablePath);
+      String path = retrieved.getOptions().get("path");
+      assertThat(path).contains("mydb");
+      assertThat(path).contains("my_table");
+
+    } finally {
+      catalog.close();
+    }
+  }
+
+  @Test
+  @DisplayName("Test DynamicTableFactory S3 options are declared")
+  void testDynamicTableFactoryS3Options() {
+    LanceDynamicTableFactory factory = new LanceDynamicTableFactory();
+    Set<String> optionalOptionKeys = new HashSet<>();
+    factory.optionalOptions().forEach(opt -> optionalOptionKeys.add(opt.key()));
+
+    assertThat(optionalOptionKeys)
+        .contains("s3-access-key", "s3-secret-key", "s3-region", "s3-endpoint");
   }
 }

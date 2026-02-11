@@ -14,6 +14,7 @@
 package org.apache.flink.connector.lance.table;
 
 import com.lancedb.lance.Dataset;
+import com.lancedb.lance.WriteParams;
 import org.apache.arrow.memory.BufferAllocator;
 import org.apache.flink.connector.lance.catalog.LanceCatalogPathResolver;
 import org.apache.flink.connector.lance.catalog.LanceStorageProvider;
@@ -53,10 +54,12 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Lance Catalog implementation.
@@ -104,6 +107,12 @@ public class LanceCatalog extends AbstractCatalog {
   private final Map<String, String> storageOptions;
   private final LanceStorageProvider storageProvider;
   private transient BufferAllocator allocator;
+
+  /**
+   * In-memory cache of user-provided table options from CREATE TABLE. Key: "database/table", Value:
+   * user options map.
+   */
+  private final Map<String, Map<String, String>> tableOptionsCache = new ConcurrentHashMap<>();
 
   /**
    * Create LanceCatalog (local storage)
@@ -327,6 +336,18 @@ public class LanceCatalog extends AbstractCatalog {
           options.putAll(StorageEnvironmentManager.toTableOptions(storageOptions));
         }
 
+        // Merge user-provided table options from CREATE TABLE
+        String tableKey = tablePath.getDatabaseName() + "/" + tablePath.getObjectName();
+        Map<String, String> cachedOptions = tableOptionsCache.get(tableKey);
+        if (cachedOptions != null) {
+          for (Map.Entry<String, String> entry : cachedOptions.entrySet()) {
+            // Do not override connector and path
+            if (!"connector".equals(entry.getKey()) && !"path".equals(entry.getKey())) {
+              options.put(entry.getKey(), entry.getValue());
+            }
+          }
+        }
+
         return CatalogTable.of(
             schemaBuilder.build(),
             "Lance Table: " + tablePath.getFullName(),
@@ -407,10 +428,47 @@ public class LanceCatalog extends AbstractCatalog {
       return;
     }
 
-    storageProvider.registerTable(tablePath.getDatabaseName(), tablePath.getObjectName());
+    String datasetPath =
+        pathResolver.resolveTablePath(tablePath.getDatabaseName(), tablePath.getObjectName());
 
-    // Actual table creation happens on first write
-    LOG.info("Registered table: {} (actual dataset will be created on write)", tablePath);
+    try {
+      storageProvider.configureEnvironment();
+
+      // Extract physical columns from the table schema and build Arrow Schema
+      Schema tableSchema = table.getUnresolvedSchema();
+      List<Schema.UnresolvedColumn> columns = tableSchema.getColumns();
+      List<RowType.RowField> rowFields = new ArrayList<>();
+      for (Schema.UnresolvedColumn column : columns) {
+        if (column instanceof Schema.UnresolvedPhysicalColumn) {
+          Schema.UnresolvedPhysicalColumn physCol = (Schema.UnresolvedPhysicalColumn) column;
+          DataType dataType = (DataType) physCol.getDataType();
+          rowFields.add(new RowType.RowField(physCol.getName(), dataType.getLogicalType()));
+        }
+      }
+
+      if (!rowFields.isEmpty()) {
+        RowType rowType = new RowType(rowFields);
+        org.apache.arrow.vector.types.pojo.Schema arrowSchema =
+            LanceTypeConverter.toArrowSchema(rowType);
+
+        // Create an empty dataset with just the schema using Dataset.create()
+        WriteParams writeParams = new WriteParams.Builder().build();
+        Dataset dataset = Dataset.create(allocator, datasetPath, arrowSchema, writeParams);
+        dataset.close();
+      }
+
+      // Cache user-provided table options
+      if (table.getOptions() != null && !table.getOptions().isEmpty()) {
+        String tableKey = tablePath.getDatabaseName() + "/" + tablePath.getObjectName();
+        tableOptionsCache.put(tableKey, new HashMap<>(table.getOptions()));
+      }
+
+      storageProvider.registerTable(tablePath.getDatabaseName(), tablePath.getObjectName());
+      LOG.info("Created table with empty dataset: {}", tablePath);
+
+    } catch (Exception e) {
+      throw new CatalogException("Failed to create table: " + tablePath, e);
+    }
   }
 
   @Override

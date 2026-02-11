@@ -104,16 +104,21 @@ public class LanceSinkWriter implements SinkWriter<RowData> {
       throw new IllegalArgumentException("Lance dataset path must not be empty");
     }
 
-    Path path = Paths.get(datasetPath);
-    this.datasetExists = Files.exists(path);
+    // Determine if dataset already exists (supports both local and remote paths)
+    this.datasetExists = checkDatasetExists(datasetPath);
 
-    // If overwrite mode and dataset already exists, delete it first
+    // If overwrite mode and dataset already exists, handle accordingly
     if (datasetExists && options.getWriteMode() == LanceOptions.WriteMode.OVERWRITE) {
-      LOG.info("Overwrite mode, deleting existing dataset: {}", datasetPath);
-      try {
-        deleteDirectory(path);
-      } catch (IOException e) {
-        throw new RuntimeException("Failed to delete existing dataset: " + datasetPath, e);
+      if (!isRemotePath(datasetPath)) {
+        LOG.info("Overwrite mode, deleting existing local dataset: {}", datasetPath);
+        try {
+          deleteDirectory(Paths.get(datasetPath));
+        } catch (IOException e) {
+          throw new RuntimeException("Failed to delete existing dataset: " + datasetPath, e);
+        }
+      } else {
+        LOG.info(
+            "Overwrite mode for remote dataset: {} (will overwrite on first write)", datasetPath);
       }
       this.datasetExists = false;
     }
@@ -242,6 +247,42 @@ public class LanceSinkWriter implements SinkWriter<RowData> {
   /** Get total written row count. */
   public long getTotalWrittenRows() {
     return totalWrittenRows;
+  }
+
+  /**
+   * Check whether a dataset exists at the given path. Supports both local filesystem paths and
+   * remote storage URIs (S3, GCS, etc.).
+   */
+  private boolean checkDatasetExists(String datasetPath) {
+    if (isRemotePath(datasetPath)) {
+      // For remote storage, try to open the dataset to check existence
+      try {
+        Dataset dataset = LanceDatasetFactory.open(datasetPath, allocator);
+        dataset.close();
+        return true;
+      } catch (Exception e) {
+        LOG.debug("Dataset does not exist at remote path: {}", datasetPath);
+        return false;
+      }
+    } else {
+      // Local filesystem check
+      Path path = Paths.get(datasetPath);
+      return Files.exists(path);
+    }
+  }
+
+  /** Detect whether a path is a remote storage URI. */
+  private static boolean isRemotePath(String path) {
+    if (path == null) {
+      return false;
+    }
+    String lower = path.toLowerCase();
+    return lower.startsWith("s3://")
+        || lower.startsWith("s3a://")
+        || lower.startsWith("gs://")
+        || lower.startsWith("az://")
+        || lower.startsWith("https://")
+        || lower.startsWith("http://");
   }
 
   /** Recursively delete a directory. */
