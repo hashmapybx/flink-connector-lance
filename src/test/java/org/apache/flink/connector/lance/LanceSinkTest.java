@@ -51,7 +51,7 @@ class LanceSinkTest {
     @BeforeEach
     void setUp() {
         datasetPath = tempDir.resolve("test_sink_dataset").toString();
-        
+
         // Create test RowType
         List<RowType.RowField> fields = new ArrayList<>();
         fields.add(new RowType.RowField("id", new BigIntType()));

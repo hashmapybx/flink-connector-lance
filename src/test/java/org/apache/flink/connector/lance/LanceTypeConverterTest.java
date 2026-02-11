@@ -84,13 +84,13 @@ class LanceTypeConverterTest {
     @DisplayName("Test Arrow floating point type to Flink type mapping")
     void testArrowFloatToFlinkType() {
         // Float32 -> FLOAT
-        Field float32Field = new Field("float32", 
+        Field float32Field = new Field("float32",
                 FieldType.nullable(new ArrowType.FloatingPoint(FloatingPointPrecision.SINGLE)), null);
         LogicalType float32Type = LanceTypeConverter.arrowTypeToFlinkType(float32Field);
         assertThat(float32Type).isInstanceOf(FloatType.class);
 
         // Float64 -> DOUBLE
-        Field float64Field = new Field("float64", 
+        Field float64Field = new Field("float64",
                 FieldType.nullable(new ArrowType.FloatingPoint(FloatingPointPrecision.DOUBLE)), null);
         LogicalType float64Type = LanceTypeConverter.arrowTypeToFlinkType(float64Field);
         assertThat(float64Type).isInstanceOf(DoubleType.class);
@@ -129,7 +129,7 @@ class LanceTypeConverterTest {
     @Test
     @DisplayName("Test Arrow Date type to Flink type mapping")
     void testArrowDateToFlinkType() {
-        Field dateField = new Field("date", 
+        Field dateField = new Field("date",
                 FieldType.nullable(new ArrowType.Date(DateUnit.DAY)), null);
         LogicalType dateType = LanceTypeConverter.arrowTypeToFlinkType(dateField);
         assertThat(dateType).isInstanceOf(DateType.class);
@@ -139,14 +139,14 @@ class LanceTypeConverterTest {
     @DisplayName("Test Arrow Timestamp type to Flink type mapping")
     void testArrowTimestampToFlinkType() {
         // Millisecond precision
-        Field tsMilliField = new Field("ts_milli", 
+        Field tsMilliField = new Field("ts_milli",
                 FieldType.nullable(new ArrowType.Timestamp(TimeUnit.MILLISECOND, null)), null);
         LogicalType tsMilliType = LanceTypeConverter.arrowTypeToFlinkType(tsMilliField);
         assertThat(tsMilliType).isInstanceOf(TimestampType.class);
         assertThat(((TimestampType) tsMilliType).getPrecision()).isEqualTo(3);
 
         // Microsecond precision
-        Field tsMicroField = new Field("ts_micro", 
+        Field tsMicroField = new Field("ts_micro",
                 FieldType.nullable(new ArrowType.Timestamp(TimeUnit.MICROSECOND, null)), null);
         LogicalType tsMicroType = LanceTypeConverter.arrowTypeToFlinkType(tsMicroField);
         assertThat(tsMicroType).isInstanceOf(TimestampType.class);
@@ -160,10 +160,10 @@ class LanceTypeConverterTest {
         ArrowType elementType = new ArrowType.FloatingPoint(FloatingPointPrecision.SINGLE);
         Field elementField = new Field("item", FieldType.notNullable(elementType), null);
         List<Field> children = Arrays.asList(elementField);
-        
-        Field vectorField = new Field("embedding", 
+
+        Field vectorField = new Field("embedding",
                 FieldType.nullable(new ArrowType.FixedSizeList(128)), children);
-        
+
         LogicalType vectorType = LanceTypeConverter.arrowTypeToFlinkType(vectorField);
         assertThat(vectorType).isInstanceOf(ArrayType.class);
         assertThat(((ArrayType) vectorType).getElementType()).isInstanceOf(FloatType.class);
@@ -214,9 +214,9 @@ class LanceTypeConverterTest {
         List<Field> fields = new ArrayList<>();
         fields.add(new Field("id", FieldType.notNullable(new ArrowType.Int(64, true)), null));
         fields.add(new Field("name", FieldType.nullable(ArrowType.Utf8.INSTANCE), null));
-        fields.add(new Field("score", 
+        fields.add(new Field("score",
                 FieldType.nullable(new ArrowType.FloatingPoint(FloatingPointPrecision.DOUBLE)), null));
-        
+
         Schema arrowSchema = new Schema(fields);
         RowType rowType = LanceTypeConverter.toFlinkRowType(arrowSchema);
 
@@ -234,7 +234,7 @@ class LanceTypeConverterTest {
         fields.add(new RowType.RowField("id", new BigIntType(false)));
         fields.add(new RowType.RowField("content", new VarCharType()));
         fields.add(new RowType.RowField("embedding", new ArrayType(new FloatType())));
-        
+
         RowType rowType = new RowType(fields);
         Schema arrowSchema = LanceTypeConverter.toArrowSchema(rowType);
 
@@ -279,9 +279,9 @@ class LanceTypeConverterTest {
     @DisplayName("Test unsupported type exception")
     void testUnsupportedTypeException() {
         // Unsupported Arrow type
-        Field unsupportedField = new Field("unsupported", 
+        Field unsupportedField = new Field("unsupported",
                 FieldType.nullable(new ArrowType.Duration(TimeUnit.SECOND)), null);
-        
+
         assertThatThrownBy(() -> LanceTypeConverter.arrowTypeToFlinkType(unsupportedField))
                 .isInstanceOf(LanceTypeConverter.UnsupportedTypeException.class)
                 .hasMessageContaining("Unsupported Arrow type");
@@ -296,7 +296,7 @@ class LanceTypeConverterTest {
         fields.add(new RowType.RowField("name", new VarCharType()));
         fields.add(new RowType.RowField("score", new DoubleType()));
         fields.add(new RowType.RowField("active", new BooleanType()));
-        
+
         RowType originalRowType = new RowType(fields);
 
         // Flink -> Arrow -> Flink

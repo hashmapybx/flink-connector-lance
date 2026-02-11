@@ -49,9 +49,9 @@ import java.util.Objects;
 
 /**
  * Lance vector search implementation.
- * 
+ *
  * <p>Supports KNN search with L2, Cosine, and Dot distance metrics.
- * 
+ *
  * <p>Usage example:
  * <pre>{@code
  * LanceVectorSearch search = LanceVectorSearch.builder()
@@ -60,7 +60,7 @@ import java.util.Objects;
  *     .metricType(MetricType.L2)
  *     .nprobes(20)
  *     .build();
- * 
+ *
  * List<SearchResult> results = search.search(queryVector, 10);
  * }</pre>
  */
@@ -95,17 +95,17 @@ public class LanceVectorSearch implements Closeable, Serializable {
      */
     public void open() throws IOException {
         LOG.info("Opening vector search, dataset: {}", datasetPath);
-        
+
         this.allocator = new RootAllocator(Long.MAX_VALUE);
-        
+
         try {
             this.dataset = Dataset.open(datasetPath, allocator);
-            
+
             // Get Schema and create converter
             Schema arrowSchema = dataset.getSchema();
             this.rowType = LanceTypeConverter.toFlinkRowType(arrowSchema);
             this.converter = new RowDataConverter(rowType);
-            
+
         } catch (Exception e) {
             throw new IOException("Cannot open dataset: " + datasetPath, e);
         }
@@ -134,14 +134,14 @@ public class LanceVectorSearch implements Closeable, Serializable {
         if (dataset == null) {
             open();
         }
-        
+
         LOG.debug("Executing vector search, k={}, vector dimension={}", k, queryVector.length);
-        
+
         // Validate query vector
         validateQueryVector(queryVector);
-        
+
         List<SearchResult> results = new ArrayList<>();
-        
+
         try {
             // Build vector query
             Query.Builder queryBuilder = new Query.Builder()
@@ -151,37 +151,37 @@ public class LanceVectorSearch implements Closeable, Serializable {
                     .setNprobes(nprobes)
                     .setDistanceType(toDistanceType(metricType))
                     .setUseIndex(true);
-            
+
             if (ef > 0) {
                 queryBuilder.setEf(ef);
             }
-            
+
             if (refineFactor != null && refineFactor > 0) {
                 queryBuilder.setRefineFactor(refineFactor);
             }
-            
+
             Query query = queryBuilder.build();
-            
+
             // Build scan options
             ScanOptions.Builder scanOptionsBuilder = new ScanOptions.Builder()
                     .nearest(query)
                     .withRowId(true);
-            
+
             if (filter != null && !filter.isEmpty()) {
                 scanOptionsBuilder.filter(filter);
             }
-            
+
             ScanOptions scanOptions = scanOptionsBuilder.build();
-            
+
             // Execute search
             try (LanceScanner scanner = dataset.newScan(scanOptions)) {
                 try (ArrowReader reader = scanner.scanBatches()) {
                     while (reader.loadNextBatch()) {
                         VectorSchemaRoot root = reader.getVectorSchemaRoot();
-                        
+
                         // Convert to RowData
                         List<RowData> rows = converter.toRowDataList(root);
-                        
+
                         // Try to get distance score (if _distance column exists)
                         Float8Vector distanceVector = null;
                         try {
@@ -189,7 +189,7 @@ public class LanceVectorSearch implements Closeable, Serializable {
                         } catch (Exception e) {
                             // _distance column may not exist
                         }
-                        
+
                         for (int i = 0; i < rows.size(); i++) {
                             double distance = 0.0;
                             if (distanceVector != null && !distanceVector.isNull(i)) {
@@ -200,10 +200,10 @@ public class LanceVectorSearch implements Closeable, Serializable {
                     }
                 }
             }
-            
+
             LOG.debug("Search completed, returned {} results", results.size());
             return results;
-            
+
         } catch (Exception e) {
             throw new IOException("Vector search failed", e);
         }
@@ -219,20 +219,20 @@ public class LanceVectorSearch implements Closeable, Serializable {
     public List<RowData> searchRowData(float[] queryVector, int k) throws IOException {
         List<SearchResult> results = search(queryVector, k);
         List<RowData> rowDataList = new ArrayList<>(results.size());
-        
+
         for (SearchResult result : results) {
             // Append distance score to RowData
             GenericRowData rowWithDistance = new GenericRowData(rowType.getFieldCount() + 1);
             RowData originalRow = result.getRowData();
-            
+
             for (int i = 0; i < rowType.getFieldCount(); i++) {
                 rowWithDistance.setField(i, getFieldValue(originalRow, i));
             }
             rowWithDistance.setField(rowType.getFieldCount(), result.getDistance());
-            
+
             rowDataList.add(rowWithDistance);
         }
-        
+
         return rowDataList;
     }
 
@@ -243,12 +243,12 @@ public class LanceVectorSearch implements Closeable, Serializable {
         if (rowData.isNullAt(index)) {
             return null;
         }
-        
+
         // Simplified handling, should get based on field type in practice
         if (rowData instanceof GenericRowData) {
             return ((GenericRowData) rowData).getField(index);
         }
-        
+
         return null;
     }
 
@@ -259,7 +259,7 @@ public class LanceVectorSearch implements Closeable, Serializable {
         if (queryVector == null || queryVector.length == 0) {
             throw new IllegalArgumentException("Query vector cannot be empty");
         }
-        
+
         // Check for NaN or Infinity values
         for (float value : queryVector) {
             if (Float.isNaN(value) || Float.isInfinite(value)) {
@@ -294,7 +294,7 @@ public class LanceVectorSearch implements Closeable, Serializable {
             }
             dataset = null;
         }
-        
+
         if (allocator != null) {
             try {
                 allocator.close();

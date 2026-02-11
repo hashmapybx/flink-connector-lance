@@ -34,7 +34,7 @@ import static org.junit.jupiter.api.Assertions.*;
 class AggregateInfoTest {
 
     // ==================== AggregateCall Tests ====================
-    
+
     @Nested
     @DisplayName("AggregateCall Tests")
     class AggregateCallTests {
@@ -44,7 +44,7 @@ class AggregateInfoTest {
         void testCountStar() {
             AggregateInfo.AggregateCall call = new AggregateInfo.AggregateCall(
                     AggregateInfo.AggregateFunction.COUNT, null, "cnt");
-            
+
             assertTrue(call.isCountStar());
             assertEquals(AggregateInfo.AggregateFunction.COUNT, call.getFunction());
             assertNull(call.getColumn());
@@ -57,7 +57,7 @@ class AggregateInfoTest {
         void testCountColumn() {
             AggregateInfo.AggregateCall call = new AggregateInfo.AggregateCall(
                     AggregateInfo.AggregateFunction.COUNT, "id", "id_count");
-            
+
             assertFalse(call.isCountStar());
             assertEquals(AggregateInfo.AggregateFunction.COUNT, call.getFunction());
             assertEquals("id", call.getColumn());
@@ -70,7 +70,7 @@ class AggregateInfoTest {
         void testSumAggregate() {
             AggregateInfo.AggregateCall call = new AggregateInfo.AggregateCall(
                     AggregateInfo.AggregateFunction.SUM, "amount", "total_amount");
-            
+
             assertFalse(call.isCountStar());
             assertEquals(AggregateInfo.AggregateFunction.SUM, call.getFunction());
             assertEquals("amount", call.getColumn());
@@ -83,7 +83,7 @@ class AggregateInfoTest {
         void testAvgAggregate() {
             AggregateInfo.AggregateCall call = new AggregateInfo.AggregateCall(
                     AggregateInfo.AggregateFunction.AVG, "score", "avg_score");
-            
+
             assertEquals(AggregateInfo.AggregateFunction.AVG, call.getFunction());
             assertEquals("score", call.getColumn());
             assertEquals("avg_score", call.getAlias());
@@ -95,7 +95,7 @@ class AggregateInfoTest {
         void testMinAggregate() {
             AggregateInfo.AggregateCall call = new AggregateInfo.AggregateCall(
                     AggregateInfo.AggregateFunction.MIN, "price", "min_price");
-            
+
             assertEquals(AggregateInfo.AggregateFunction.MIN, call.getFunction());
             assertEquals("price", call.getColumn());
             assertEquals("min_price", call.getAlias());
@@ -106,7 +106,7 @@ class AggregateInfoTest {
         void testMaxAggregate() {
             AggregateInfo.AggregateCall call = new AggregateInfo.AggregateCall(
                     AggregateInfo.AggregateFunction.MAX, "price", "max_price");
-            
+
             assertEquals(AggregateInfo.AggregateFunction.MAX, call.getFunction());
             assertEquals("price", call.getColumn());
             assertEquals("max_price", call.getAlias());
@@ -121,7 +121,7 @@ class AggregateInfoTest {
                     AggregateInfo.AggregateFunction.SUM, "amount", "total");
             AggregateInfo.AggregateCall call3 = new AggregateInfo.AggregateCall(
                     AggregateInfo.AggregateFunction.SUM, "price", "total");
-            
+
             assertEquals(call1, call2);
             assertEquals(call1.hashCode(), call2.hashCode());
             assertNotEquals(call1, call3);
@@ -129,7 +129,7 @@ class AggregateInfoTest {
     }
 
     // ==================== AggregateInfo Builder Tests ====================
-    
+
     @Nested
     @DisplayName("AggregateInfo Builder Tests")
     class AggregateInfoBuilderTests {
@@ -140,7 +140,7 @@ class AggregateInfoTest {
             AggregateInfo info = AggregateInfo.builder()
                     .addCountStar("cnt")
                     .build();
-            
+
             assertNotNull(info);
             assertEquals(1, info.getAggregateCalls().size());
             assertTrue(info.isSimpleCountStar());
@@ -155,7 +155,7 @@ class AggregateInfoTest {
                     .addAvg("score", "avg_score")
                     .groupBy("category", "region")
                     .build();
-            
+
             assertNotNull(info);
             assertEquals(2, info.getAggregateCalls().size());
             assertTrue(info.hasGroupBy());
@@ -173,7 +173,7 @@ class AggregateInfoTest {
                     .addMin("price", "min_price")
                     .addMax("price", "max_price")
                     .build();
-            
+
             assertNotNull(info);
             assertEquals(5, info.getAggregateCalls().size());
             assertFalse(info.hasGroupBy());
@@ -192,11 +192,11 @@ class AggregateInfoTest {
         void testAddAggregateCall() {
             AggregateInfo.AggregateCall call = new AggregateInfo.AggregateCall(
                     AggregateInfo.AggregateFunction.SUM, "amount", "total");
-            
+
             AggregateInfo info = AggregateInfo.builder()
                     .addAggregateCall(call)
                     .build();
-            
+
             assertEquals(1, info.getAggregateCalls().size());
             assertEquals(call, info.getAggregateCalls().get(0));
         }
@@ -207,7 +207,7 @@ class AggregateInfoTest {
             AggregateInfo info = AggregateInfo.builder()
                     .addCount("id", "id_count")
                     .build();
-            
+
             AggregateInfo.AggregateCall call = info.getAggregateCalls().get(0);
             assertEquals(AggregateInfo.AggregateFunction.COUNT, call.getFunction());
             assertEquals("id", call.getColumn());
@@ -218,12 +218,12 @@ class AggregateInfoTest {
         @DisplayName("groupBy(List) should work correctly")
         void testGroupByWithList() {
             List<String> groupCols = Arrays.asList("col1", "col2", "col3");
-            
+
             AggregateInfo info = AggregateInfo.builder()
                     .addCountStar("cnt")
                     .groupBy(groupCols)
                     .build();
-            
+
             assertEquals(groupCols, info.getGroupByColumns());
         }
 
@@ -231,19 +231,19 @@ class AggregateInfoTest {
         @DisplayName("groupByFieldIndices should be correctly set")
         void testGroupByFieldIndices() {
             int[] indices = {0, 2, 4};
-            
+
             AggregateInfo info = AggregateInfo.builder()
                     .addCountStar("cnt")
                     .groupBy("col1", "col3", "col5")
                     .groupByFieldIndices(indices)
                     .build();
-            
+
             assertArrayEquals(indices, info.getGroupByFieldIndices());
         }
     }
 
     // ==================== AggregateInfo Methods Tests ====================
-    
+
     @Nested
     @DisplayName("AggregateInfo Methods Tests")
     class AggregateInfoMethodTests {
@@ -256,9 +256,9 @@ class AggregateInfoTest {
                     .addAvg("score", "avg_score")
                     .groupBy("category", "region")
                     .build();
-            
+
             List<String> required = info.getRequiredColumns();
-            
+
             // Should contain group columns and aggregate columns
             assertTrue(required.contains("category"));
             assertTrue(required.contains("region"));
@@ -274,9 +274,9 @@ class AggregateInfoTest {
                     .addAvg("amount", "avg_amount")  // Same column
                     .groupBy("category")
                     .build();
-            
+
             List<String> required = info.getRequiredColumns();
-            
+
             // amount should appear only once
             long amountCount = required.stream().filter(c -> c.equals("amount")).count();
             assertEquals(1, amountCount);
@@ -288,7 +288,7 @@ class AggregateInfoTest {
             AggregateInfo info = AggregateInfo.builder()
                     .addCountStar("cnt")
                     .build();
-            
+
             List<String> required = info.getRequiredColumns();
             assertTrue(required.isEmpty());
         }
@@ -300,17 +300,17 @@ class AggregateInfoTest {
                     .addSum("amount", "total")
                     .groupBy("category")
                     .build();
-            
+
             AggregateInfo info2 = AggregateInfo.builder()
                     .addSum("amount", "total")
                     .groupBy("category")
                     .build();
-            
+
             AggregateInfo info3 = AggregateInfo.builder()
                     .addAvg("amount", "avg")
                     .groupBy("category")
                     .build();
-            
+
             assertEquals(info1, info2);
             assertEquals(info1.hashCode(), info2.hashCode());
             assertNotEquals(info1, info3);
@@ -323,9 +323,9 @@ class AggregateInfoTest {
                     .addSum("amount", "total")
                     .groupBy("category")
                     .build();
-            
+
             String str = info.toString();
-            
+
             assertTrue(str.contains("AggregateInfo"));
             assertTrue(str.contains("SUM(amount)"));
             assertTrue(str.contains("groupBy"));
@@ -334,7 +334,7 @@ class AggregateInfoTest {
     }
 
     // ==================== Aggregate Function Enum Tests ====================
-    
+
     @Nested
     @DisplayName("AggregateFunction Enum Tests")
     class AggregateFunctionEnumTests {
@@ -343,7 +343,7 @@ class AggregateInfoTest {
         @DisplayName("Should contain all supported aggregate functions")
         void testAllAggregateFunctions() {
             AggregateInfo.AggregateFunction[] functions = AggregateInfo.AggregateFunction.values();
-            
+
             assertEquals(6, functions.length);
             assertTrue(Arrays.asList(functions).contains(AggregateInfo.AggregateFunction.COUNT));
             assertTrue(Arrays.asList(functions).contains(AggregateInfo.AggregateFunction.COUNT_DISTINCT));

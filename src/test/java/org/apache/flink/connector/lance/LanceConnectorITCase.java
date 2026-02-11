@@ -208,7 +208,7 @@ class LanceConnectorITCase {
                 .metricType(MetricType.COSINE)
                 .numPartitions(64)
                 .maxLevel(5)
-                .m(24)
+                .maxEdges(24)
                 .efConstruction(200)
                 .replace(true)
                 .build();
@@ -284,7 +284,7 @@ class LanceConnectorITCase {
     @DisplayName("Test type conversion bidirectional consistency")
     void testTypeConversionConsistency() {
         // Flink RowType -> Arrow Schema -> Flink RowType
-        org.apache.arrow.vector.types.pojo.Schema arrowSchema = 
+        org.apache.arrow.vector.types.pojo.Schema arrowSchema =
                 LanceTypeConverter.toArrowSchema(rowType);
         RowType convertedRowType = LanceTypeConverter.toFlinkRowType(arrowSchema);
 
@@ -302,7 +302,7 @@ class LanceConnectorITCase {
         float[] originalVector = new float[] {0.1f, 0.2f, 0.3f, 0.4f, 0.5f};
 
         // Convert to ArrayData
-        org.apache.flink.table.data.ArrayData arrayData = 
+        org.apache.flink.table.data.ArrayData arrayData =
                 RowDataConverter.toArrayData(originalVector);
 
         // Convert back to float array
@@ -319,7 +319,7 @@ class LanceConnectorITCase {
         double[] originalVector = new double[] {0.1, 0.2, 0.3, 0.4, 0.5};
 
         // Convert to ArrayData
-        org.apache.flink.table.data.ArrayData arrayData = 
+        org.apache.flink.table.data.ArrayData arrayData =
                 RowDataConverter.toArrayData(originalVector);
 
         // Convert back to double array
@@ -352,17 +352,17 @@ class LanceConnectorITCase {
     @DisplayName("Test search result similarity calculation")
     void testSearchResultSimilarityCalculation() {
         // Perfect match (distance=0)
-        LanceVectorSearch.SearchResult perfectMatch = 
+        LanceVectorSearch.SearchResult perfectMatch =
                 new LanceVectorSearch.SearchResult(null, 0.0);
         assertThat(perfectMatch.getSimilarity()).isEqualTo(1.0);
 
         // Normal match (distance=1)
-        LanceVectorSearch.SearchResult normalMatch = 
+        LanceVectorSearch.SearchResult normalMatch =
                 new LanceVectorSearch.SearchResult(null, 1.0);
         assertThat(normalMatch.getSimilarity()).isEqualTo(0.5);
 
         // Far match (distance=9)
-        LanceVectorSearch.SearchResult farMatch = 
+        LanceVectorSearch.SearchResult farMatch =
                 new LanceVectorSearch.SearchResult(null, 9.0);
         assertThat(farMatch.getSimilarity()).isEqualTo(0.1);
     }

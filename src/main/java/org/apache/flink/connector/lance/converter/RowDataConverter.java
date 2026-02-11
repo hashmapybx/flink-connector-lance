@@ -66,15 +66,12 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.Serializable;
-import java.nio.charset.StandardCharsets;
-import java.time.Instant;
-import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 
 /**
  * Converter between RowData and Arrow data.
- * 
+ *
  * <p>Responsible for bidirectional conversion between Arrow VectorSchemaRoot and Flink RowData.
  */
 public class RowDataConverter implements Serializable {
@@ -103,26 +100,26 @@ public class RowDataConverter implements Serializable {
     public List<RowData> toRowDataList(VectorSchemaRoot root) {
         List<RowData> rows = new ArrayList<>();
         int rowCount = root.getRowCount();
-        
+
         for (int rowIndex = 0; rowIndex < rowCount; rowIndex++) {
             GenericRowData rowData = new GenericRowData(fieldTypes.length);
-            
+
             for (int fieldIndex = 0; fieldIndex < fieldTypes.length; fieldIndex++) {
                 String fieldName = fieldNames[fieldIndex];
                 FieldVector vector = root.getVector(fieldName);
-                
+
                 if (vector == null) {
                     rowData.setField(fieldIndex, null);
                     continue;
                 }
-                
+
                 Object value = readValue(vector, rowIndex, fieldTypes[fieldIndex]);
                 rowData.setField(fieldIndex, value);
             }
-            
+
             rows.add(rowData);
         }
-        
+
         return rows;
     }
 
@@ -134,23 +131,23 @@ public class RowDataConverter implements Serializable {
      */
     public void toVectorSchemaRoot(List<RowData> rows, VectorSchemaRoot root) {
         root.allocateNew();
-        
+
         for (int rowIndex = 0; rowIndex < rows.size(); rowIndex++) {
             RowData rowData = rows.get(rowIndex);
-            
+
             for (int fieldIndex = 0; fieldIndex < fieldTypes.length; fieldIndex++) {
                 String fieldName = fieldNames[fieldIndex];
                 FieldVector vector = root.getVector(fieldName);
-                
+
                 if (vector == null) {
                     continue;
                 }
-                
+
                 Object value = getFieldValue(rowData, fieldIndex, fieldTypes[fieldIndex]);
                 writeValue(vector, rowIndex, value, fieldTypes[fieldIndex]);
             }
         }
-        
+
         root.setRowCount(rows.size());
     }
 
@@ -239,13 +236,13 @@ public class RowDataConverter implements Serializable {
      */
     private ArrayData readArray(FieldVector vector, int index, ArrayType arrayType) {
         LogicalType elementType = arrayType.getElementType();
-        
+
         if (vector instanceof FixedSizeListVector) {
             FixedSizeListVector listVector = (FixedSizeListVector) vector;
             int listSize = listVector.getListSize();
             FieldVector dataVector = listVector.getDataVector();
             int startIndex = index * listSize;
-            
+
             return readArrayData(dataVector, startIndex, listSize, elementType);
         } else if (vector instanceof ListVector) {
             ListVector listVector = (ListVector) vector;
@@ -253,7 +250,7 @@ public class RowDataConverter implements Serializable {
             int endIndex = listVector.getElementEndIndex(index);
             int listSize = endIndex - startIndex;
             FieldVector dataVector = listVector.getDataVector();
-            
+
             return readArrayData(dataVector, startIndex, listSize, elementType);
         }
 
@@ -529,24 +526,24 @@ public class RowDataConverter implements Serializable {
         if (vector instanceof FixedSizeListVector) {
             FixedSizeListVector listVector = (FixedSizeListVector) vector;
             int listSize = listVector.getListSize();
-            
+
             if (size != listSize) {
                 throw new IllegalArgumentException(
                         "Array size " + size + " does not match FixedSizeList size " + listSize);
             }
-            
+
             FieldVector dataVector = listVector.getDataVector();
             int startIndex = index * listSize;
-            
+
             writeArrayData(dataVector, startIndex, arrayData, elementType);
             listVector.setNotNull(index);
         } else if (vector instanceof ListVector) {
             ListVector listVector = (ListVector) vector;
             listVector.startNewValue(index);
-            
+
             FieldVector dataVector = listVector.getDataVector();
             int startIndex = listVector.getElementStartIndex(index);
-            
+
             writeArrayData(dataVector, startIndex, arrayData, elementType);
             listVector.endValue(index, size);
         } else {

@@ -38,7 +38,7 @@ import java.util.concurrent.TimeUnit;
 
 /**
  * Flink SQL complete demo test script.
- * 
+ *
  * <p>This test demonstrates how to use Flink SQL to operate Lance datasets:
  * <ul>
  *   <li>Create Lance Catalog</li>
@@ -65,7 +65,7 @@ class FlinkSqlDemo {
                 .inBatchMode()
                 .build();
         tableEnv = TableEnvironment.create(settings);
-        
+
         // Set paths
         warehousePath = tempDir.resolve("lance_warehouse").toString();
         datasetPath = tempDir.resolve("lance_dataset").toString();
@@ -97,11 +97,11 @@ class FlinkSqlDemo {
             "    'write.batch-size' = '1024',\n" +
             "    'write.mode' = 'overwrite'\n" +
             ")", datasetPath);
-        
+
         System.out.println("========== Create Lance Table ==========");
         System.out.println(createTableSql);
         System.out.println();
-        
+
         tableEnv.executeSql(createTableSql);
         System.out.println("✅ Table created successfully!\n");
     }
@@ -122,22 +122,22 @@ class FlinkSqlDemo {
             "    'path' = '%s',\n" +
             "    'write.mode' = 'overwrite'\n" +
             ")", path.resolve("lance-db1"));
-        
+
         tableEnv.executeSql(createTableSql);
-        
+
         // Insert data
-        String insertSql = 
+        String insertSql =
             "INSERT INTO lance_documents VALUES\n" +
             "    (1, 'Introduction to AI', ARRAY[0.1, 0.2, 0.3, 0.4]),\n" +
             "    (2, 'Machine Learning Guide', ARRAY[0.2, 0.3, 0.4, 0.5]),\n" +
             "    (3, 'Deep Learning Basics', ARRAY[0.3, 0.4, 0.5, 0.6]),\n" +
             "    (4, 'Neural Networks', ARRAY[0.4, 0.5, 0.6, 0.7]),\n" +
             "    (5, 'Computer Vision', ARRAY[0.5, 0.6, 0.7, 0.8])";
-        
+
         System.out.println("========== Insert Vector Data ==========");
         System.out.println(insertSql);
         System.out.println();
-        
+
         TableResult result = tableEnv.executeSql(insertSql);
         result.await(30, TimeUnit.SECONDS);
         System.out.println("✅ Data inserted successfully!\n");
@@ -147,7 +147,7 @@ class FlinkSqlDemo {
     @DisplayName("3. Query Lance Table Data")
     void testSelectData() throws Exception {
         // Create source table (for generating test data)
-        String createSourceSql = 
+        String createSourceSql =
             "CREATE TABLE test_source (\n" +
             "    id BIGINT,\n" +
             "    name STRING\n" +
@@ -159,16 +159,16 @@ class FlinkSqlDemo {
             "    'fields.id.start' = '1',\n" +
             "    'fields.id.end' = '10'\n" +
             ")";
-        
+
         tableEnv.executeSql(createSourceSql);
-        
+
         // Query data
         String selectSql = "SELECT id, name FROM test_source LIMIT 5";
-        
+
         System.out.println("========== Query Data ==========");
         System.out.println(selectSql);
         System.out.println();
-        
+
         TableResult result = tableEnv.executeSql(selectSql);
         result.print();
         System.out.println("✅ Query completed!\n");
@@ -201,11 +201,11 @@ class FlinkSqlDemo {
             "    'vector.metric' = 'L2',\n" +
             "    'vector.nprobes' = '20'\n" +
             ")", datasetPath);
-        
+
         System.out.println("========== Create Table with Index Configuration ==========");
         System.out.println(createTableSql);
         System.out.println();
-        
+
         tableEnv.executeSql(createTableSql);
         System.out.println("✅ Table created successfully!\n");
     }
@@ -214,34 +214,34 @@ class FlinkSqlDemo {
     @DisplayName("5. Different Index Type Configuration Examples")
     void testDifferentIndexTypes() {
         System.out.println("========== Index Type Configuration Examples ==========\n");
-        
+
         // IVF_PQ index (recommended, balances accuracy and speed)
-        String ivfPqConfig = 
+        String ivfPqConfig =
             "-- IVF_PQ index configuration (recommended for large-scale vector data)\n" +
             "'index.type' = 'IVF_PQ',\n" +
             "'index.num-partitions' = '256',      -- Number of cluster centers\n" +
             "'index.num-sub-vectors' = '16',      -- Number of sub-vectors\n" +
             "'index.num-bits' = '8'               -- Quantization bits per sub-vector\n";
-        
+
         System.out.println(ivfPqConfig);
-        
+
         // IVF_HNSW index (high accuracy)
-        String ivfHnswConfig = 
+        String ivfHnswConfig =
             "-- IVF_HNSW index configuration (for high accuracy scenarios)\n" +
             "'index.type' = 'IVF_HNSW',\n" +
             "'index.num-partitions' = '256',\n" +
             "'index.max-level' = '7',             -- HNSW max level\n" +
             "'index.m' = '16',                    -- HNSW connections per level\n" +
             "'index.ef-construction' = '100'      -- ef parameter during construction\n";
-        
+
         System.out.println(ivfHnswConfig);
-        
+
         // IVF_FLAT index (highest accuracy, suitable for small datasets)
-        String ivfFlatConfig = 
+        String ivfFlatConfig =
             "-- IVF_FLAT index configuration (for small-scale datasets)\n" +
             "'index.type' = 'IVF_FLAT',\n" +
             "'index.num-partitions' = '64'        -- Number of cluster centers\n";
-        
+
         System.out.println(ivfFlatConfig);
         System.out.println("✅ Configuration examples displayed!\n");
     }
@@ -250,25 +250,25 @@ class FlinkSqlDemo {
     @DisplayName("6. Distance Metric Type Configuration Examples")
     void testMetricTypes() {
         System.out.println("========== Distance Metric Type Examples ==========\n");
-        
-        String l2Config = 
+
+        String l2Config =
             "-- L2 distance (Euclidean distance, default)\n" +
             "'vector.metric' = 'L2'\n" +
             "-- Suitable for: General vector search\n";
         System.out.println(l2Config);
-        
-        String cosineConfig = 
+
+        String cosineConfig =
             "-- Cosine distance (Cosine similarity)\n" +
             "'vector.metric' = 'COSINE'\n" +
             "-- Suitable for: Text semantic similarity\n";
         System.out.println(cosineConfig);
-        
-        String dotConfig = 
+
+        String dotConfig =
             "-- Dot distance (Dot product)\n" +
             "'vector.metric' = 'DOT'\n" +
             "-- Suitable for: Already normalized vectors\n";
         System.out.println(dotConfig);
-        
+
         System.out.println("✅ Configuration examples displayed!\n");
     }
 
@@ -283,21 +283,21 @@ class FlinkSqlDemo {
             "    'warehouse' = '%s',\n" +
             "    'default-database' = 'default'\n" +
             ")", warehousePath);
-        
+
         System.out.println("========== Create Lance Catalog ==========");
         System.out.println(createCatalogSql);
         System.out.println();
-        
+
         tableEnv.executeSql(createCatalogSql);
-        
+
         // Use Catalog
         tableEnv.executeSql("USE CATALOG lance_catalog");
         System.out.println("✅ Catalog created and switched!\n");
-        
+
         // Create database
         tableEnv.executeSql("CREATE DATABASE IF NOT EXISTS vector_db");
         System.out.println("✅ Database vector_db created!\n");
-        
+
         // List databases
         System.out.println("Database list:");
         tableEnv.executeSql("SHOW DATABASES").print();
@@ -312,9 +312,9 @@ class FlinkSqlDemo {
         StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
         env.setParallelism(1);
         StreamTableEnvironment streamTableEnv = StreamTableEnvironment.create(env);
-        
+
         // Create data generator table (simulating real-time data)
-        String createSourceSql = 
+        String createSourceSql =
             "CREATE TABLE realtime_events (\n" +
             "    event_id BIGINT,\n" +
             "    event_type STRING,\n" +
@@ -328,7 +328,7 @@ class FlinkSqlDemo {
             "    'fields.event_id.end' = '100',\n" +
             "    'fields.event_type.length' = '10'\n" +
             ")";
-        
+
         // Create Lance Sink table
         String createSinkSql = String.format(
             "CREATE TABLE lance_events (\n" +
@@ -340,23 +340,23 @@ class FlinkSqlDemo {
             "    'write.batch-size' = '100',\n" +
             "    'write.mode' = 'append'\n" +
             ")", datasetPath);
-        
+
         System.out.println("========== Streaming Write Example ==========");
         System.out.println("-- Source table definition");
         System.out.println(createSourceSql);
         System.out.println("\n-- Sink table definition");
         System.out.println(createSinkSql);
         System.out.println();
-        
+
         streamTableEnv.executeSql(createSourceSql);
         streamTableEnv.executeSql(createSinkSql);
-        
+
         // Execute streaming write
         String insertSql = "INSERT INTO lance_events SELECT event_id, event_type FROM realtime_events";
         System.out.println("-- Streaming insert statement");
         System.out.println(insertSql);
         System.out.println();
-        
+
         System.out.println("✅ Streaming write configuration completed!\n");
     }
 
@@ -368,7 +368,7 @@ class FlinkSqlDemo {
         // Use relative path based on project root
         Path path = Paths.get(System.getProperty("user.dir"), "test-data");
         System.out.println("========== Complete Vector Storage and Search Example ==========\n");
-        
+
         // 1. Create vector table
         String createTableSql = String.format(
             "-- 1. Create vector storage table\n" +
@@ -395,13 +395,13 @@ class FlinkSqlDemo {
             "    'vector.metric' = 'COSINE',\n" +
             "    'vector.nprobes' = '10'\n" +
             ")", path.resolve("lance-db3"));
-        
+
         System.out.println(createTableSql);
         System.out.println();
         tableEnv.executeSql(createTableSql);
-        
+
         // 2. Insert test data
-        String insertSql = 
+        String insertSql =
             "-- 2. Insert vector data\n" +
             "INSERT INTO document_vectors VALUES\n" +
             "    (1, 'Flink Getting Started Guide', 'Introduction to Apache Flink basics...', \n" +
@@ -414,20 +414,20 @@ class FlinkSqlDemo {
             "     ARRAY[0.4, 0.5, 0.6, 0.7], 'format', TIMESTAMP '2024-01-04 13:00:00'),\n" +
             "    (5, 'SQL Connector Development', 'How to develop Flink SQL connectors...', \n" +
             "     ARRAY[0.5, 0.6, 0.7, 0.8], 'development', TIMESTAMP '2024-01-05 14:00:00')";
-        
+
         System.out.println(insertSql);
         System.out.println();
         TableResult result = tableEnv.executeSql(insertSql);
         result.await(30, TimeUnit.SECONDS);
-        
+
         // 3. Query data
-        String selectSql = 
+        String selectSql =
             "-- 3. Query vector data\n" +
             "SELECT doc_id, title, category, create_time\n" +
             "FROM document_vectors\n" +
             "WHERE category = 'tutorial'\n" +
             "ORDER BY create_time DESC";
-        
+
         System.out.println(selectSql);
         System.out.println();
         TableResult tableResult = tableEnv.executeSql(selectSql);
@@ -438,13 +438,13 @@ class FlinkSqlDemo {
         }
 
         // 4. Aggregation query
-        String aggSql = 
+        String aggSql =
             "-- 4. Count documents by category\n" +
             "SELECT category, COUNT(*) as doc_count\n" +
             "FROM document_vectors\n" +
             "GROUP BY category\n" +
             "ORDER BY doc_count DESC";
-        
+
         System.out.println(aggSql);
         System.out.println();
         tableEnv.executeSql(aggSql).print();
@@ -456,11 +456,11 @@ class FlinkSqlDemo {
     @DisplayName("9.1 Vector Search IVF_PQ Index Example")
     void testVectorSearchWithIvfPq() throws Exception {
         System.out.println("========== Vector Search IVF_PQ Index Example ==========");
-        
+
         // Use relative path based on project root
         Path basePath = Paths.get(System.getProperty("user.dir"), "test-data");
         String datasetPath = basePath.resolve("lance-vector-search").toString();
-        
+
         // ============================================
         // Step 1: Create vector table with IVF_PQ index configuration
         // ============================================
@@ -484,42 +484,42 @@ class FlinkSqlDemo {
             "    'vector.metric' = 'L2',\n" +
             "    'vector.nprobes' = '10'\n" +
             ")", datasetPath);
-        
+
         System.out.println("-- Step 1: Create vector table with IVF_PQ index configuration");
         System.out.println(createTableSql);
         System.out.println();
         tableEnv.executeSql(createTableSql);
-        
+
         // ============================================
         // Step 2: Insert vector data
         // ============================================
-        String insertSql = 
+        String insertSql =
             "INSERT INTO vector_documents VALUES\n" +
             "    (1, 'Flink Stream Processing', ARRAY[0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8]),\n" +
             "    (2, 'Spark Batch Processing', ARRAY[0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]),\n" +
             "    (3, 'Kafka Message Queue', ARRAY[0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1]),\n" +
             "    (4, 'Vector Database', ARRAY[0.15, 0.25, 0.35, 0.45, 0.55, 0.65, 0.75, 0.85]),\n" +
             "    (5, 'Machine Learning Basics', ARRAY[0.12, 0.22, 0.32, 0.42, 0.52, 0.62, 0.72, 0.82])";
-        
+
         System.out.println("-- Step 2: Insert vector data");
         System.out.println(insertSql);
         System.out.println();
         tableEnv.executeSql(insertSql).await(30, TimeUnit.SECONDS);
         System.out.println("✅ Data insertion completed\n");
-        
+
         // ============================================
         // Step 3: Register vector search UDF
         // ============================================
-        String createFunctionSql = 
+        String createFunctionSql =
             "CREATE TEMPORARY FUNCTION vector_search AS \n" +
             "    'org.apache.flink.connector.lance.table.LanceVectorSearchFunction'";
-        
+
         System.out.println("-- Step 3: Register vector search UDF");
         System.out.println(createFunctionSql);
         System.out.println();
         tableEnv.executeSql(createFunctionSql);
         System.out.println("✅ UDF registration completed\n");
-        
+
         // ============================================
         // Step 4: Execute vector search - Basic usage
         // ============================================
@@ -531,7 +531,7 @@ class FlinkSqlDemo {
         System.out.println("--   Param 4: TopK count to return");
         System.out.println("--   Param 5: Distance metric type (L2/COSINE/DOT)");
         System.out.println();
-        
+
         String vectorSearchSql = String.format(
             "SELECT * FROM TABLE(\n" +
             "    vector_search(\n" +
@@ -542,12 +542,12 @@ class FlinkSqlDemo {
             "        'L2'                               -- L2 distance metric\n" +
             "    )\n" +
             ")", datasetPath);
-        
+
         System.out.println(vectorSearchSql);
         System.out.println();
         System.out.println("📊 Search results (sorted by L2 distance, smaller distance = more similar):");
         System.out.println("---------------------------------------------------");
-        
+
         try {
             TableResult result = tableEnv.executeSql(vectorSearchSql);
             result.print();
@@ -555,12 +555,12 @@ class FlinkSqlDemo {
             System.out.println("⚠️ Vector search execution error: " + e.getMessage());
             System.out.println("   This may be because the dataset needs to build index first");
         }
-        
+
         // ============================================
         // Step 5: Use COSINE cosine similarity search
         // ============================================
         System.out.println("\n-- Step 5: Use COSINE cosine similarity search");
-        
+
         String cosineSearchSql = String.format(
             "SELECT * FROM TABLE(\n" +
             "    vector_search(\n" +
@@ -571,23 +571,23 @@ class FlinkSqlDemo {
             "        'COSINE'                           -- Cosine similarity\n" +
             "    )\n" +
             ")", datasetPath);
-        
+
         System.out.println(cosineSearchSql);
         System.out.println();
         System.out.println("📊 Search results (sorted by cosine distance):");
         System.out.println("---------------------------------------------------");
-        
+
         try {
             tableEnv.executeSql(cosineSearchSql).print();
         } catch (Exception e) {
             System.out.println("⚠️ Execution error: " + e.getMessage());
         }
-        
+
         // ============================================
         // Step 6: Combine vector search with other queries
         // ============================================
         System.out.println("\n-- Step 6: Combine vector search with other queries (LATERAL TABLE)");
-        
+
         String lateralSearchSql = String.format(
             "-- First query data, then perform vector search based on results\n" +
             "SELECT \n" +
@@ -598,10 +598,10 @@ class FlinkSqlDemo {
             "    vector_search('%s', 'embedding', ARRAY[0.15, 0.25, 0.35, 0.45, 0.55, 0.65, 0.75, 0.85], 5, 'L2')\n" +
             ") AS v\n" +
             "WHERE v._distance < 1.0  -- Only return results with distance less than 1", datasetPath);
-        
+
         System.out.println(lateralSearchSql);
         System.out.println();
-        
+
         // ============================================
         // Print configuration parameter descriptions
         // ============================================
@@ -617,7 +617,7 @@ class FlinkSqlDemo {
         System.out.println("║ vector.metric               ║ Distance metric: L2(Euclidean)/COSINE/DOT(Dot product)║");
         System.out.println("║ vector.nprobes              ║ Number of partitions to probe during search       ║");
         System.out.println("╚═════════════════════════════╩════════════════════════════════════════════════════╝");
-        
+
         System.out.println("\n========== Distance Metric Type Description ==========");
         System.out.println("╔════════════════╦════════════════════════════════════════════════════════════════╗");
         System.out.println("║  Metric Type   ║                          Description                           ║");
@@ -626,7 +626,7 @@ class FlinkSqlDemo {
         System.out.println("║    COSINE      ║ Cosine distance, range [0,2], smaller = more similar, for text║");
         System.out.println("║    DOT         ║ Negative dot product, smaller = more similar (needs normalization)║");
         System.out.println("╚════════════════╩════════════════════════════════════════════════════════════════╝");
-        
+
         System.out.println("\n✅ Vector search IVF_PQ example completed!\n");
     }
 
@@ -634,10 +634,10 @@ class FlinkSqlDemo {
     @DisplayName("9.2 Different Index Types Comparison Example")
     void testDifferentIndexTypesDetailed() throws Exception {
         System.out.println("========== Different Vector Index Types Comparison ==========");
-        
+
         // Use relative path based on project root
         Path basePath = Paths.get(System.getProperty("user.dir"), "test-data");
-        
+
         // ============================================
         // IVF_PQ Index - For large-scale data, low memory footprint
         // ============================================
@@ -645,7 +645,7 @@ class FlinkSqlDemo {
         System.out.println("Pros: Low memory footprint, fast search speed");
         System.out.println("Cons: Lower accuracy (quantization loss)");
         System.out.println();
-        
+
         String ivfPqSql = String.format(
             "CREATE TABLE ivf_pq_vectors (\n" +
             "    id BIGINT,\n" +
@@ -660,10 +660,10 @@ class FlinkSqlDemo {
             "    'index.num-bits' = '8',            -- Encoding bits per sub-vector\n" +
             "    'vector.metric' = 'L2'\n" +
             ")", basePath.resolve("ivf-pq-demo"));
-        
+
         System.out.println(ivfPqSql);
         System.out.println();
-        
+
         // ============================================
         // IVF_HNSW Index - High accuracy search
         // ============================================
@@ -671,7 +671,7 @@ class FlinkSqlDemo {
         System.out.println("Pros: High search accuracy");
         System.out.println("Cons: Higher memory footprint, slower index building");
         System.out.println();
-        
+
         String ivfHnswSql = String.format(
             "CREATE TABLE ivf_hnsw_vectors (\n" +
             "    id BIGINT,\n" +
@@ -687,10 +687,10 @@ class FlinkSqlDemo {
             "    'vector.metric' = 'COSINE',\n" +
             "    'vector.ef' = '50'                 -- Candidate set size during search\n" +
             ")", basePath.resolve("ivf-hnsw-demo"));
-        
+
         System.out.println(ivfHnswSql);
         System.out.println();
-        
+
         // ============================================
         // IVF_FLAT Index - Highest accuracy, brute force search
         // ============================================
@@ -698,7 +698,7 @@ class FlinkSqlDemo {
         System.out.println("Pros: 100% search accuracy (lossless)");
         System.out.println("Cons: Slower search speed, suitable for small datasets");
         System.out.println();
-        
+
         String ivfFlatSql = String.format(
             "CREATE TABLE ivf_flat_vectors (\n" +
             "    id BIGINT,\n" +
@@ -712,10 +712,10 @@ class FlinkSqlDemo {
             "    'vector.metric' = 'DOT',\n" +
             "    'vector.nprobes' = '32'            -- Number of partitions to probe during search\n" +
             ")", basePath.resolve("ivf-flat-demo"));
-        
+
         System.out.println(ivfFlatSql);
         System.out.println();
-        
+
         // ============================================
         // Index Selection Recommendations
         // ============================================
@@ -727,7 +727,7 @@ class FlinkSqlDemo {
         System.out.println("║    IVF_HNSW       ║   100K-1M      ║    High       ║ Semantic search, Q&A systems   ║");
         System.out.println("║    IVF_FLAT       ║   <100K        ║    Highest    ║ Small-scale high-precision scenarios║");
         System.out.println("╚═══════════════════╩════════════════╩═══════════════╩════════════════════════════════╝");
-        
+
         System.out.println("\n✅ Index type comparison example completed!\n");
     }
 
@@ -737,7 +737,7 @@ class FlinkSqlDemo {
         System.out.println("========================================");
         System.out.println("     Flink SQL Lance Connector Quick Reference");
         System.out.println("========================================\n");
-        
+
         System.out.println("【Create Table】");
         System.out.println("CREATE TABLE table_name (");
         System.out.println("    column_name data_type,");
@@ -746,19 +746,19 @@ class FlinkSqlDemo {
         System.out.println("    'connector' = 'lance',");
         System.out.println("    'path' = '/path/to/dataset'");
         System.out.println(");\n");
-        
+
         System.out.println("【Insert Data】");
         System.out.println("INSERT INTO table_name VALUES (1, 'text', ARRAY[0.1, 0.2, 0.3]);\n");
-        
+
         System.out.println("【Query Data】");
         System.out.println("SELECT * FROM table_name WHERE condition;\n");
-        
+
         System.out.println("【Create Catalog】");
         System.out.println("CREATE CATALOG lance_catalog WITH (");
         System.out.println("    'type' = 'lance',");
         System.out.println("    'warehouse' = '/path/to/warehouse'");
         System.out.println(");\n");
-        
+
         System.out.println("【Data Type Mapping】");
         System.out.println("╔════════════════════╦═══════════════════╗");
         System.out.println("║   Flink SQL Type   ║     Lance Type    ║");
@@ -776,7 +776,7 @@ class FlinkSqlDemo {
         System.out.println("║ TIMESTAMP          ║ Timestamp         ║");
         System.out.println("║ ARRAY<FLOAT>       ║ FixedSizeList     ║");
         System.out.println("╚════════════════════╩═══════════════════╝\n");
-        
+
         System.out.println("【Configuration Options】");
         System.out.println("╔═══════════════════════════╦════════════════════════════════╗");
         System.out.println("║         Option            ║           Description          ║");
@@ -792,7 +792,7 @@ class FlinkSqlDemo {
         System.out.println("║ vector.metric             ║ Distance metric: L2/COSINE/DOT ║");
         System.out.println("║ vector.nprobes            ║ Search probes (default 20)     ║");
         System.out.println("╚═══════════════════════════╩════════════════════════════════╝\n");
-        
+
         System.out.println("✅ Quick reference completed!");
     }
 }

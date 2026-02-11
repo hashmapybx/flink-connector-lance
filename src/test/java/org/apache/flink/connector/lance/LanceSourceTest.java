@@ -52,7 +52,7 @@ class LanceSourceTest {
     @BeforeEach
     void setUp() {
         datasetPath = tempDir.resolve("test_dataset").toString();
-        
+
         // Create test RowType
         List<RowType.RowField> fields = new ArrayList<>();
         fields.add(new RowType.RowField("id", new BigIntType()));

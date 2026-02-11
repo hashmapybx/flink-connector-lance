@@ -73,7 +73,7 @@ class LanceIndexBuilderTest {
                 .indexType(IndexType.IVF_HNSW)
                 .numPartitions(64)
                 .maxLevel(5)
-                .m(24)
+                .maxEdges(24)
                 .efConstruction(200)
                 .metricType(MetricType.COSINE)
                 .build();

@@ -23,14 +23,13 @@ import org.apache.flink.connector.lance.sink.LanceSink;
 import org.apache.flink.table.connector.ChangelogMode;
 import org.apache.flink.table.connector.sink.DynamicTableSink;
 import org.apache.flink.table.connector.sink.SinkV2Provider;
-import org.apache.flink.table.data.RowData;
 import org.apache.flink.table.types.DataType;
 import org.apache.flink.table.types.logical.RowType;
 import org.apache.flink.types.RowKind;
 
 /**
  * Lance dynamic table Sink.
- * 
+ *
  * <p>Implements DynamicTableSink interface, writes Flink data to Lance Dataset using Sink V2 API (FLIP-143).
  * <p>Provides runtime Sink through {@link SinkV2Provider}.
  */

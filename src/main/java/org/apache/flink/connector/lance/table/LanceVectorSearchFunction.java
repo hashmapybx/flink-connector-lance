@@ -25,40 +25,33 @@ import org.apache.flink.table.annotation.FunctionHint;
 import org.apache.flink.table.api.DataTypes;
 import org.apache.flink.table.catalog.DataTypeFactory;
 import org.apache.flink.table.data.ArrayData;
-import org.apache.flink.table.data.GenericArrayData;
 import org.apache.flink.table.data.GenericRowData;
 import org.apache.flink.table.data.RowData;
 import org.apache.flink.table.data.StringData;
 import org.apache.flink.table.functions.FunctionContext;
 import org.apache.flink.table.functions.TableFunction;
-import org.apache.flink.table.types.DataType;
 import org.apache.flink.table.types.inference.TypeInference;
 import org.apache.flink.table.types.inference.TypeStrategies;
-import org.apache.flink.table.types.logical.ArrayType;
-import org.apache.flink.table.types.logical.DoubleType;
-import org.apache.flink.table.types.logical.RowType;
 import org.apache.flink.types.Row;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.IOException;
 import java.math.BigDecimal;
 import java.util.List;
-import java.util.Optional;
 
 /**
  * Lance vector search UDF.
- * 
+ *
  * <p>Implements TableFunction, supports executing vector search in SQL.
- * 
+ *
  * <p>Usage example:
  * <pre>{@code
  * -- Register UDF
- * CREATE TEMPORARY FUNCTION vector_search AS 
+ * CREATE TEMPORARY FUNCTION vector_search AS
  *     'org.apache.flink.connector.lance.table.LanceVectorSearchFunction'
  *     LANGUAGE JAVA USING JAR '/path/to/flink-connector-lance.jar';
- * 
+ *
  * -- Use UDF for vector search
  * SELECT * FROM TABLE(
  *     vector_search('/path/to/dataset', 'embedding', ARRAY[0.1, 0.2, 0.3], 10, 'L2')
@@ -86,7 +79,7 @@ public class LanceVectorSearchFunction extends TableFunction<Row> {
     @Override
     public void close() throws Exception {
         LOG.info("Closing LanceVectorSearchFunction");
-        
+
         if (vectorSearch != null) {
             try {
                 vectorSearch.close();
@@ -95,7 +88,7 @@ public class LanceVectorSearchFunction extends TableFunction<Row> {
             }
             vectorSearch = null;
         }
-        
+
         super.close();
     }
 
@@ -111,52 +104,52 @@ public class LanceVectorSearchFunction extends TableFunction<Row> {
     public void eval(String datasetPath, String columnName, Float[] queryVector, Integer k, String metric) {
         try {
             // Check if need to reinitialize vector searcher
-            if (vectorSearch == null || 
-                !datasetPath.equals(currentDatasetPath) || 
+            if (vectorSearch == null ||
+                !datasetPath.equals(currentDatasetPath) ||
                 !columnName.equals(currentColumnName)) {
-                
+
                 if (vectorSearch != null) {
                     vectorSearch.close();
                 }
-                
+
                 LanceOptions.MetricType metricType = LanceOptions.MetricType.fromValue(
                         metric != null ? metric : "L2"
                 );
-                
+
                 vectorSearch = LanceVectorSearch.builder()
                         .datasetPath(datasetPath)
                         .columnName(columnName)
                         .metricType(metricType)
                         .build();
-                
+
                 vectorSearch.open();
-                
+
                 currentDatasetPath = datasetPath;
                 currentColumnName = columnName;
             }
-            
+
             // Convert query vector
             float[] query = new float[queryVector.length];
             for (int i = 0; i < queryVector.length; i++) {
                 query[i] = queryVector[i] != null ? queryVector[i] : 0.0f;
             }
-            
+
             // Execute search
             int topK = k != null ? k : 10;
             List<LanceVectorSearch.SearchResult> results = vectorSearch.search(query, topK);
-            
+
             // Output results
             for (LanceVectorSearch.SearchResult result : results) {
                 RowData rowData = result.getRowData();
                 double distance = result.getDistance();
-                
+
                 // Build output Row
                 Row outputRow = convertToRow(rowData, distance);
                 if (outputRow != null) {
                     collect(outputRow);
                 }
             }
-            
+
         } catch (Exception e) {
             LOG.error("Vector search failed", e);
             throw new RuntimeException("Vector search failed: " + e.getMessage(), e);
@@ -191,7 +184,7 @@ public class LanceVectorSearchFunction extends TableFunction<Row> {
 
     /**
      * Execute vector search (supports BigDecimal[] parameter)
-     * 
+     *
      * <p>ARRAY[0.1, 0.2, ...] literals in Flink SQL are parsed as DECIMAL type arrays,
      * so this method overload is needed for support.
      *
@@ -293,11 +286,11 @@ public class LanceVectorSearchFunction extends TableFunction<Row> {
         if (rowData == null) {
             return null;
         }
-        
+
         if (rowData instanceof GenericRowData) {
             GenericRowData genericRowData = (GenericRowData) rowData;
             int arity = genericRowData.getArity();
-            
+
             // Create new Row including distance field
             Object[] values = new Object[arity + 1];
             for (int i = 0; i < arity; i++) {
@@ -305,10 +298,10 @@ public class LanceVectorSearchFunction extends TableFunction<Row> {
                 values[i] = convertField(field);
             }
             values[arity] = distance;
-            
+
             return Row.of(values);
         }
-        
+
         return null;
     }
 
@@ -319,11 +312,11 @@ public class LanceVectorSearchFunction extends TableFunction<Row> {
         if (field == null) {
             return null;
         }
-        
+
         if (field instanceof StringData) {
             return ((StringData) field).toString();
         }
-        
+
         if (field instanceof ArrayData) {
             ArrayData arrayData = (ArrayData) field;
             int size = arrayData.size();
@@ -337,7 +330,7 @@ public class LanceVectorSearchFunction extends TableFunction<Row> {
             }
             return result;
         }
-        
+
         return field;
     }
 

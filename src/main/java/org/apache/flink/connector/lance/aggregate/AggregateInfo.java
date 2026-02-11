@@ -26,8 +26,9 @@ import java.util.Objects;
 
 /**
  * Aggregate information encapsulation class.
- * 
- * <p>Encapsulates information needed for aggregate push-down, including aggregate functions, target columns and group by columns.
+ *
+ * <p>Encapsulates information needed for aggregate push-down, including aggregate functions,
+ * target columns and group by columns.
  */
 public class AggregateInfo implements Serializable {
 
@@ -91,8 +92,8 @@ public class AggregateInfo implements Serializable {
             if (this == o) return true;
             if (o == null || getClass() != o.getClass()) return false;
             AggregateCall that = (AggregateCall) o;
-            return function == that.function && 
-                   Objects.equals(column, that.column) && 
+            return function == that.function &&
+                   Objects.equals(column, that.column) &&
                    Objects.equals(alias, that.alias);
         }
 
@@ -117,7 +118,7 @@ public class AggregateInfo implements Serializable {
     private AggregateInfo(Builder builder) {
         this.aggregateCalls = Collections.unmodifiableList(new ArrayList<>(builder.aggregateCalls));
         this.groupByColumns = Collections.unmodifiableList(new ArrayList<>(builder.groupByColumns));
-        this.groupByFieldIndices = builder.groupByFieldIndices != null ? 
+        this.groupByFieldIndices = builder.groupByFieldIndices != null ?
                 builder.groupByFieldIndices.clone() : new int[0];
     }
 
@@ -144,8 +145,8 @@ public class AggregateInfo implements Serializable {
      * Whether is simple COUNT(*) query (no group by)
      */
     public boolean isSimpleCountStar() {
-        return aggregateCalls.size() == 1 && 
-               aggregateCalls.get(0).isCountStar() && 
+        return aggregateCalls.size() == 1 &&
+               aggregateCalls.get(0).isCountStar() &&
                !hasGroupBy();
     }
 
@@ -167,7 +168,7 @@ public class AggregateInfo implements Serializable {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
         AggregateInfo that = (AggregateInfo) o;
-        return Objects.equals(aggregateCalls, that.aggregateCalls) && 
+        return Objects.equals(aggregateCalls, that.aggregateCalls) &&
                Objects.equals(groupByColumns, that.groupByColumns);
     }
 

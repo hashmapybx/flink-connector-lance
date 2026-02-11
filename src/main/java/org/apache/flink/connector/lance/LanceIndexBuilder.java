@@ -41,9 +41,9 @@ import java.util.Optional;
 
 /**
  * Lance vector index builder.
- * 
+ *
  * <p>Supports building IVF_PQ, IVF_HNSW_PQ, and IVF_FLAT vector indices.
- * 
+ *
  * <p>Usage example:
  * <pre>{@code
  * LanceIndexBuilder builder = LanceIndexBuilder.builder()
@@ -53,7 +53,7 @@ import java.util.Optional;
  *     .numPartitions(256)
  *     .numSubVectors(16)
  *     .build();
- * 
+ *
  * IndexBuildResult result = builder.buildIndex();
  * }</pre>
  */
@@ -97,31 +97,31 @@ public class LanceIndexBuilder implements Closeable, Serializable {
      * @return Index build result
      */
     public IndexBuildResult buildIndex() throws IOException {
-        LOG.info("Starting to build vector index, type: {}, column: {}, dataset: {}", 
+        LOG.info("Starting to build vector index, type: {}, column: {}, dataset: {}",
                 indexType, columnName, datasetPath);
-        
+
         long startTime = System.currentTimeMillis();
-        
+
         try {
             // Initialize resources
             this.allocator = new RootAllocator(Long.MAX_VALUE);
             this.dataset = Dataset.open(datasetPath, allocator);
-            
+
             // Validate column exists
             validateColumn();
-            
+
             // Get distance metric type
             DistanceType distanceType = toDistanceType(metricType);
-            
+
             // Build IVF parameters
             IvfBuildParams ivfParams = new IvfBuildParams.Builder()
                     .setNumPartitions(numPartitions)
                     .build();
-            
+
             // Build index based on index type
             IndexType lanceIndexType;
             IndexParams indexParams;
-            
+
             switch (indexType) {
                 case IVF_PQ:
                     lanceIndexType = IndexType.IVF_PQ;
@@ -136,7 +136,7 @@ public class LanceIndexBuilder implements Closeable, Serializable {
                             .setVectorIndexParams(ivfPqParams)
                             .build();
                     break;
-                    
+
                 case IVF_HNSW:
                     lanceIndexType = IndexType.IVF_HNSW_PQ;
                     HnswBuildParams hnswParams = new HnswBuildParams.Builder()
@@ -155,7 +155,7 @@ public class LanceIndexBuilder implements Closeable, Serializable {
                             .setVectorIndexParams(ivfHnswParams)
                             .build();
                     break;
-                    
+
                 case IVF_FLAT:
                     lanceIndexType = IndexType.IVF_FLAT;
                     VectorIndexParams ivfFlatParams = VectorIndexParams.ivfFlat(numPartitions, distanceType);
@@ -164,11 +164,11 @@ public class LanceIndexBuilder implements Closeable, Serializable {
                             .setVectorIndexParams(ivfFlatParams)
                             .build();
                     break;
-                    
+
                 default:
                     throw new IllegalArgumentException("Unsupported index type: " + indexType);
             }
-            
+
             // Create index
             dataset.createIndex(
                     Collections.singletonList(columnName),
@@ -177,12 +177,12 @@ public class LanceIndexBuilder implements Closeable, Serializable {
                     indexParams,
                     replace
             );
-            
+
             long endTime = System.currentTimeMillis();
             long duration = endTime - startTime;
-            
+
             LOG.info("Vector index build completed, duration: {} ms", duration);
-            
+
             return new IndexBuildResult(
                     true,
                     indexType,
@@ -211,7 +211,7 @@ public class LanceIndexBuilder implements Closeable, Serializable {
         // Check if column exists in Schema
         boolean columnExists = dataset.getSchema().getFields().stream()
                 .anyMatch(field -> field.getName().equals(columnName));
-        
+
         if (!columnExists) {
             throw new IOException("Vector column does not exist: " + columnName);
         }
@@ -243,7 +243,7 @@ public class LanceIndexBuilder implements Closeable, Serializable {
             }
             dataset = null;
         }
-        
+
         if (allocator != null) {
             try {
                 allocator.close();
@@ -274,7 +274,7 @@ public class LanceIndexBuilder implements Closeable, Serializable {
                 .numSubVectors(options.getIndexNumSubVectors())
                 .numBits(options.getIndexNumBits())
                 .maxLevel(options.getIndexMaxLevel())
-                .m(options.getIndexM())
+                .maxEdges(options.getIndexM())
                 .efConstruction(options.getIndexEfConstruction())
                 .build();
     }
@@ -335,7 +335,7 @@ public class LanceIndexBuilder implements Closeable, Serializable {
             return this;
         }
 
-        public Builder m(int m) {
+        public Builder maxEdges(int m) {
             this.m = m;
             return this;
         }

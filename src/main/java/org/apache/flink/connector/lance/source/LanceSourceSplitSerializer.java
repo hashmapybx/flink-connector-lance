@@ -61,7 +61,9 @@ public class LanceSourceSplitSerializer implements SimpleVersionedSerializer<Lan
     @Override
     public LanceSourceSplit deserialize(int version, byte[] serialized) throws IOException {
         if (version != CURRENT_VERSION) {
-            throw new IOException("Unsupported serialization version: " + version + ", current version: " + CURRENT_VERSION);
+            throw new IOException(
+                    "Unsupported serialization version: " + version
+                            + ", current version: " + CURRENT_VERSION);
         }
 
         DataInputStream in = new DataInputStream(new ByteArrayInputStream(serialized));

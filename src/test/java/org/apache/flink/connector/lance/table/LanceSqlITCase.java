@@ -214,29 +214,29 @@ class LanceSqlITCase {
     @DisplayName("Test LanceCatalog creation and basic operations")
     void testLanceCatalogBasicOperations() throws Exception {
         LanceCatalog catalog = new LanceCatalog("test_catalog", "default", warehousePath);
-        
+
         try {
             catalog.open();
-            
+
             // Verify default database exists
             assertThat(catalog.databaseExists("default")).isTrue();
-            
+
             // List databases
             List<String> databases = catalog.listDatabases();
             assertThat(databases).contains("default");
-            
+
             // Create new database
             catalog.createDatabase("test_db", null, false);
             assertThat(catalog.databaseExists("test_db")).isTrue();
-            
+
             // List tables (empty)
             List<String> tables = catalog.listTables("test_db");
             assertThat(tables).isEmpty();
-            
+
             // Drop database
             catalog.dropDatabase("test_db", false, true);
             assertThat(catalog.databaseExists("test_db")).isFalse();
-            
+
         } finally {
             catalog.close();
         }
@@ -246,7 +246,7 @@ class LanceSqlITCase {
     @DisplayName("Test LanceCatalog warehouse path")
     void testLanceCatalogWarehouse() throws Exception {
         LanceCatalog catalog = new LanceCatalog("test", "default", warehousePath);
-        
+
         try {
             catalog.open();
             assertThat(catalog.getWarehouse()).isEqualTo(warehousePath);
@@ -288,7 +288,7 @@ class LanceSqlITCase {
         assertThat(LanceCatalogFactory.S3_ENDPOINT.key()).isEqualTo("s3-endpoint");
         assertThat(LanceCatalogFactory.S3_VIRTUAL_HOSTED_STYLE.key()).isEqualTo("s3-virtual-hosted-style");
         assertThat(LanceCatalogFactory.S3_ALLOW_HTTP.key()).isEqualTo("s3-allow-http");
-        
+
         // Default values
         assertThat(LanceCatalogFactory.S3_VIRTUAL_HOSTED_STYLE.defaultValue()).isTrue();
         assertThat(LanceCatalogFactory.S3_ALLOW_HTTP.defaultValue()).isFalse();
@@ -300,19 +300,19 @@ class LanceSqlITCase {
         // S3 path should be identified as remote storage
         LanceCatalog s3Catalog = new LanceCatalog("test", "default", "s3://bucket/path");
         assertThat(s3Catalog.isRemoteStorage()).isTrue();
-        
+
         // S3A path
         LanceCatalog s3aCatalog = new LanceCatalog("test", "default", "s3a://bucket/path");
         assertThat(s3aCatalog.isRemoteStorage()).isTrue();
-        
+
         // GCS path
         LanceCatalog gcsCatalog = new LanceCatalog("test", "default", "gs://bucket/path");
         assertThat(gcsCatalog.isRemoteStorage()).isTrue();
-        
+
         // Azure path
         LanceCatalog azCatalog = new LanceCatalog("test", "default", "az://container/path");
         assertThat(azCatalog.isRemoteStorage()).isTrue();
-        
+
         // Local path should be identified as local storage
         LanceCatalog localCatalog = new LanceCatalog("test", "default", warehousePath);
         assertThat(localCatalog.isRemoteStorage()).isFalse();
@@ -325,14 +325,14 @@ class LanceSqlITCase {
         storageOptions.put("aws_access_key_id", "test-key");
         storageOptions.put("aws_secret_access_key", "test-secret");
         storageOptions.put("aws_region", "us-east-1");
-        
+
         LanceCatalog catalog = new LanceCatalog(
-                "test_catalog", 
-                "default", 
+                "test_catalog",
+                "default",
                 "s3://bucket/warehouse",
                 storageOptions
         );
-        
+
         assertThat(catalog.getStorageOptions()).containsEntry("aws_access_key_id", "test-key");
         assertThat(catalog.getStorageOptions()).containsEntry("aws_secret_access_key", "test-secret");
         assertThat(catalog.getStorageOptions()).containsEntry("aws_region", "us-east-1");

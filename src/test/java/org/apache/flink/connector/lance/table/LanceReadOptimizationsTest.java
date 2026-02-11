@@ -45,7 +45,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * Read optimization tests
- * 
+ *
  * <p>Test contents:
  * <ul>
  *   <li>Limit push-down</li>
@@ -171,7 +171,7 @@ public class LanceReadOptimizationsTest {
             // Create status = 'active' AND score > 60 expression
             ResolvedExpression statusFilter = createEqualsExpression("status", "active");
             ResolvedExpression scoreFilter = createComparisonExpression("score", 60.0, BuiltInFunctionDefinitions.GREATER_THAN);
-            
+
             CallExpression andExpr = CallExpression.permanent(
                     BuiltInFunctionDefinitions.AND,
                     Arrays.asList(statusFilter, scoreFilter),
@@ -191,7 +191,7 @@ public class LanceReadOptimizationsTest {
             // Create name IS NULL expression
             FieldReferenceExpression fieldRef = new FieldReferenceExpression(
                     "name", DataTypes.STRING(), 0, 1);
-            
+
             CallExpression isNullExpr = CallExpression.permanent(
                     BuiltInFunctionDefinitions.IS_NULL,
                     Collections.singletonList(fieldRef),
@@ -211,7 +211,7 @@ public class LanceReadOptimizationsTest {
             // Create name IS NOT NULL expression
             FieldReferenceExpression fieldRef = new FieldReferenceExpression(
                     "name", DataTypes.STRING(), 0, 1);
-            
+
             CallExpression isNotNullExpr = CallExpression.permanent(
                     BuiltInFunctionDefinitions.IS_NOT_NULL,
                     Collections.singletonList(fieldRef),
@@ -232,7 +232,7 @@ public class LanceReadOptimizationsTest {
             FieldReferenceExpression fieldRef = new FieldReferenceExpression(
                     "name", DataTypes.STRING(), 0, 1);
             ValueLiteralExpression pattern = new ValueLiteralExpression("test%");
-            
+
             CallExpression likeExpr = CallExpression.permanent(
                     BuiltInFunctionDefinitions.LIKE,
                     Arrays.asList(fieldRef, pattern),
@@ -255,7 +255,7 @@ public class LanceReadOptimizationsTest {
             ValueLiteralExpression value1 = new ValueLiteralExpression("active");
             ValueLiteralExpression value2 = new ValueLiteralExpression("pending");
             ValueLiteralExpression value3 = new ValueLiteralExpression("completed");
-            
+
             CallExpression inExpr = CallExpression.permanent(
                     BuiltInFunctionDefinitions.IN,
                     Arrays.asList(fieldRef, value1, value2, value3),

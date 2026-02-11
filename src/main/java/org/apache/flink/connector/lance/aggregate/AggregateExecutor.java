@@ -41,8 +41,9 @@ import java.util.Set;
 
 /**
  * Aggregate executor.
- * 
- * <p>Executes aggregate calculations at data source side, supports COUNT, SUM, AVG, MIN, MAX and other aggregate functions.
+ *
+ * <p>Executes aggregate calculations at data source side,
+ * supports COUNT, SUM, AVG, MIN, MAX and other aggregate functions.
  */
 public class AggregateExecutor implements Serializable {
 
@@ -80,9 +81,9 @@ public class AggregateExecutor implements Serializable {
 
         // Extract group key
         GroupKey groupKey = extractGroupKey(row);
-        
+
         // Get or create aggregate state
-        AggregateState state = aggregateStates.computeIfAbsent(groupKey, 
+        AggregateState state = aggregateStates.computeIfAbsent(groupKey,
                 k -> new AggregateState(aggregateInfo.getAggregateCalls().size()));
 
         // Update state for each aggregate function
@@ -96,7 +97,7 @@ public class AggregateExecutor implements Serializable {
     /**
      * Accumulate single aggregate function
      */
-    private void accumulateCall(AggregateState state, int index, 
+    private void accumulateCall(AggregateState state, int index,
                                  AggregateInfo.AggregateCall call, RowData row) {
         switch (call.getFunction()) {
             case COUNT:
@@ -246,7 +247,7 @@ public class AggregateExecutor implements Serializable {
     /**
      * Get single aggregate function result
      */
-    private Object getAggregateResult(AggregateState state, int index, 
+    private Object getAggregateResult(AggregateState state, int index,
                                        AggregateInfo.AggregateCall call) {
         switch (call.getFunction()) {
             case COUNT:
@@ -389,7 +390,7 @@ public class AggregateExecutor implements Serializable {
      */
     private static class GroupKey implements Serializable {
         private static final long serialVersionUID = 1L;
-        
+
         static final GroupKey EMPTY = new GroupKey(new Object[0]);
 
         private final Object[] values;
@@ -521,8 +522,8 @@ public class AggregateExecutor implements Serializable {
 
         // Aggregate result columns
         for (AggregateInfo.AggregateCall call : calls) {
-            String alias = call.getAlias() != null ? call.getAlias() : 
-                    call.getFunction().name().toLowerCase() + "_" + 
+            String alias = call.getAlias() != null ? call.getAlias() :
+                    call.getFunction().name().toLowerCase() + "_" +
                     (call.getColumn() != null ? call.getColumn() : "star");
             LogicalType resultType = getAggregateResultType(call);
             fields.add(new RowType.RowField(alias, resultType));

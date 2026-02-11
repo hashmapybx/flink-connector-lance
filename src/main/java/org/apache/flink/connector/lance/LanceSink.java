@@ -52,9 +52,9 @@ import java.util.Optional;
 
 /**
  * Lance Sink implementation.
- * 
+ *
  * <p>Writes Flink RowData to Lance dataset, supports batch writing and Checkpoint.
- * 
+ *
  * <p>Usage example:
  * <pre>{@code
  * LanceOptions options = LanceOptions.builder()
@@ -62,7 +62,7 @@ import java.util.Optional;
  *     .writeBatchSize(1024)
  *     .writeMode(WriteMode.APPEND)
  *     .build();
- * 
+ *
  * LanceSink sink = new LanceSink(options, rowType);
  * dataStream.addSink(sink);
  * }</pre>
@@ -98,41 +98,41 @@ public class LanceSink extends RichSinkFunction<RowData> implements Checkpointed
     @Override
     public void open(Configuration parameters) throws Exception {
         super.open(parameters);
-        
+
         LOG.info("Opening Lance Sink: {}", options.getPath());
-        
+
         this.allocator = new RootAllocator(Long.MAX_VALUE);
         this.buffer = new ArrayList<>(options.getWriteBatchSize());
         this.totalWrittenRows = 0;
         this.isFirstWrite = true;
-        
+
         // Initialize converter and Schema
         this.converter = new RowDataConverter(rowType);
         this.arrowSchema = LanceTypeConverter.toArrowSchema(rowType);
-        
+
         // Check if dataset exists
         String datasetPath = options.getPath();
         if (datasetPath == null || datasetPath.isEmpty()) {
             throw new IllegalArgumentException("Lance dataset path cannot be empty");
         }
-        
+
         Path path = Paths.get(datasetPath);
         this.datasetExists = Files.exists(path);
-        
+
         // If overwrite mode and dataset exists, delete first
         if (datasetExists && options.getWriteMode() == LanceOptions.WriteMode.OVERWRITE) {
             LOG.info("Overwrite mode, deleting existing dataset: {}", datasetPath);
             deleteDirectory(path);
             this.datasetExists = false;
         }
-        
+
         LOG.info("Lance Sink opened, Schema: {}", rowType);
     }
 
     @Override
     public void invoke(RowData value, Context context) throws Exception {
         buffer.add(value);
-        
+
         // When buffer reaches batch size, execute write
         if (buffer.size() >= options.getWriteBatchSize()) {
             flush();
@@ -146,20 +146,20 @@ public class LanceSink extends RichSinkFunction<RowData> implements Checkpointed
         if (buffer.isEmpty()) {
             return;
         }
-        
+
         LOG.debug("Flushing buffer, row count: {}", buffer.size());
-        
+
         try (VectorSchemaRoot root = VectorSchemaRoot.create(arrowSchema, allocator)) {
             // Convert RowData to VectorSchemaRoot
             converter.toVectorSchemaRoot(buffer, root);
-            
+
             String datasetPath = options.getPath();
-            
+
             // Build write parameters
             WriteParams writeParams = new WriteParams.Builder()
                     .withMaxRowsPerFile(options.getWriteMaxRowsPerFile())
                     .build();
-            
+
             // Create Fragment
             List<FragmentMetadata> fragments = Fragment.create(
                     datasetPath,
@@ -167,7 +167,7 @@ public class LanceSink extends RichSinkFunction<RowData> implements Checkpointed
                     root,
                     writeParams
             );
-            
+
             if (!datasetExists) {
                 // Create new dataset (using Overwrite operation)
                 FragmentOperation.Overwrite overwrite = new FragmentOperation.Overwrite(fragments, arrowSchema);
@@ -192,14 +192,18 @@ public class LanceSink extends RichSinkFunction<RowData> implements Checkpointed
                             existingDataset.close();
                         }
 
-                        FragmentOperation.Append append = new FragmentOperation.Append(fragments);
-                        dataset = append.commit(allocator, datasetPath, Optional.of(readVersion), Collections.emptyMap());
+                        FragmentOperation.Append append =
+                                new FragmentOperation.Append(fragments);
+                        dataset = append.commit(
+                                allocator, datasetPath,
+                                Optional.of(readVersion),
+                                Collections.emptyMap());
                     }
                 }
-            
+
             totalWrittenRows += buffer.size();
             LOG.debug("Written {} rows, total: {} rows", buffer.size(), totalWrittenRows);
-            
+
             buffer.clear();
         } catch (Exception e) {
             throw new IOException("Failed to write Lance dataset", e);
@@ -223,7 +227,7 @@ public class LanceSink extends RichSinkFunction<RowData> implements Checkpointed
             }
             dataset = null;
         }
-        
+
         if (allocator != null) {
             try {
                 allocator.close();
@@ -232,16 +236,16 @@ public class LanceSink extends RichSinkFunction<RowData> implements Checkpointed
             }
             allocator = null;
         }
-        
+
         LOG.info("Lance Sink closed, total written {} rows", totalWrittenRows);
-        
+
         super.close();
     }
 
     @Override
     public void snapshotState(FunctionSnapshotContext context) throws Exception {
         LOG.debug("Snapshot state, checkpointId: {}", context.getCheckpointId());
-        
+
         // Flush all buffered data at Checkpoint
         flush();
     }
@@ -335,7 +339,7 @@ public class LanceSink extends RichSinkFunction<RowData> implements Checkpointed
             if (path == null || path.isEmpty()) {
                 throw new IllegalArgumentException("Dataset path cannot be empty");
             }
-            
+
             if (rowType == null) {
                 throw new IllegalArgumentException("RowType cannot be null");
             }

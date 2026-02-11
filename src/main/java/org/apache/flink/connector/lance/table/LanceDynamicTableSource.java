@@ -18,7 +18,6 @@
 
 package org.apache.flink.connector.lance.table;
 
-import org.apache.flink.api.common.eventtime.WatermarkStrategy;
 import org.apache.flink.connector.lance.aggregate.AggregateInfo;
 import org.apache.flink.connector.lance.config.LanceOptions;
 import org.apache.flink.connector.lance.source.LanceSource;
@@ -30,7 +29,6 @@ import org.apache.flink.table.connector.source.abilities.SupportsAggregatePushDo
 import org.apache.flink.table.connector.source.abilities.SupportsFilterPushDown;
 import org.apache.flink.table.connector.source.abilities.SupportsLimitPushDown;
 import org.apache.flink.table.connector.source.abilities.SupportsProjectionPushDown;
-import org.apache.flink.table.data.RowData;
 import org.apache.flink.table.expressions.AggregateExpression;
 import org.apache.flink.table.expressions.CallExpression;
 import org.apache.flink.table.expressions.FieldReferenceExpression;
@@ -48,11 +46,12 @@ import java.util.stream.Collectors;
 
 /**
  * Lance dynamic table Source.
- * 
- * <p>Implements ScanTableSource interface, supports column pruning, filter push-down, limit push-down and aggregate push-down.
+ *
+ * <p>Implements ScanTableSource interface, supports column pruning,
+ * filter push-down, limit push-down and aggregate push-down.
  * <p>Uses Source V2 API (FLIP-27), provides runtime Source through {@link SourceProvider}.
  */
-public class LanceDynamicTableSource implements ScanTableSource, 
+public class LanceDynamicTableSource implements ScanTableSource,
         SupportsProjectionPushDown, SupportsFilterPushDown, SupportsLimitPushDown,
         SupportsAggregatePushDown {
 
@@ -92,7 +91,7 @@ public class LanceDynamicTableSource implements ScanTableSource,
     @Override
     public ScanRuntimeProvider getScanRuntimeProvider(ScanContext runtimeProviderContext) {
         RowType rowType = (RowType) physicalDataType.getLogicalType();
-        
+
         // If column pruning was applied, build a new RowType
         RowType projectedRowType = rowType;
         if (projectedFields != null) {
@@ -273,10 +272,15 @@ public class LanceDynamicTableSource implements ScanTableSource,
             fieldName = ((FieldReferenceExpression) right).getName();
             value = extractLiteralValue(left);
             // For asymmetric operators, need to swap operator
-            if (">".equals(operator)) operator = "<";
-            else if ("<".equals(operator)) operator = ">";
-            else if (">=".equals(operator)) operator = "<=";
-            else if ("<=".equals(operator)) operator = ">=";
+            if (">".equals(operator)) {
+                operator = "<";
+            } else if ("<".equals(operator)) {
+                operator = ">";
+            } else if (">=".equals(operator)) {
+                operator = "<=";
+            } else if ("<=".equals(operator)) {
+                operator = ">=";
+            }
         }
 
         if (fieldName != null && value != null) {
@@ -308,7 +312,7 @@ public class LanceDynamicTableSource implements ScanTableSource,
         if (expr instanceof ValueLiteralExpression) {
             ValueLiteralExpression literal = (ValueLiteralExpression) expr;
             Object value = literal.getValueAs(Object.class).orElse(null);
-            
+
             if (value == null) {
                 return "NULL";
             } else if (value instanceof String) {
@@ -381,7 +385,7 @@ public class LanceDynamicTableSource implements ScanTableSource,
             List<int[]> groupingSets,
             List<AggregateExpression> aggregateExpressions,
             DataType producedDataType) {
-        
+
         // Currently only support simple single grouping set
         if (groupingSets.size() != 1) {
             return false;
@@ -429,10 +433,10 @@ public class LanceDynamicTableSource implements ScanTableSource,
      * Convert Flink aggregate expression to internal aggregate call
      */
     private AggregateInfo.AggregateCall convertAggregateExpression(
-            AggregateExpression aggExpr, 
+            AggregateExpression aggExpr,
             List<String> fieldNames,
             int aggIndex) {
-        
+
         FunctionDefinition funcDef = aggExpr.getFunctionDefinition();
         List<FieldReferenceExpression> args = aggExpr.getArgs();
         String alias = "agg_" + aggIndex;

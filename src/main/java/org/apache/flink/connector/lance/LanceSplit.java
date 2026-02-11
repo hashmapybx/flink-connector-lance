@@ -25,7 +25,7 @@ import java.util.Objects;
 
 /**
  * Lance data split.
- * 
+ *
  * <p>Represents a Fragment in Lance dataset, used for parallel data reading.
  */
 public class LanceSplit implements InputSplit, Serializable {

@@ -33,10 +33,10 @@ import java.util.Set;
 
 /**
  * Lance dynamic table factory.
- * 
+ *
  * <p>Implements Flink Table API DynamicTableSourceFactory and DynamicTableSinkFactory interfaces,
  * supports creating Lance tables via SQL DDL.
- * 
+ *
  * <p>Usage example:
  * <pre>{@code
  * CREATE TABLE lance_table (

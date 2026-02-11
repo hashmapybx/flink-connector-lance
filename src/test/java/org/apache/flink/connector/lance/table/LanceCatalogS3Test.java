@@ -47,13 +47,13 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Lance Catalog S3 integration tests.
- * 
+ *
  * <p>This test class is divided into two parts:
  * <ul>
  *   <li>Unit tests that don't require MinIO connection (always run)</li>
  *   <li>Integration tests that require MinIO connection (require external MinIO service configuration)</li>
  * </ul>
- * 
+ *
  * <p>To run tests that require MinIO, set the following environment variables:
  * <ul>
  *   <li>MINIO_ENDPOINT - MinIO service address, e.g., http://localhost:9000</li>
@@ -61,7 +61,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  *   <li>MINIO_SECRET_KEY - MinIO secret key (default: minioadmin)</li>
  *   <li>MINIO_BUCKET - Test bucket name (default: lance-test-bucket)</li>
  * </ul>
- * 
+ *
  * <p>Quick way to start MinIO (using Docker):
  * <pre>
  * docker run -p 9000:9000 -p 9001:9001 \
@@ -69,7 +69,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  *   -e "MINIO_ROOT_PASSWORD=minioadmin" \
  *   minio/minio server /data --console-address ":9001"
  * </pre>
- * 
+ *
  * <p>Or use a locally installed MinIO service.
  */
 class LanceCatalogS3Test {
@@ -102,7 +102,7 @@ class LanceCatalogS3Test {
             LOG.info("MinIO configuration detected:");
             LOG.info("  Endpoint: {}", minioEndpoint);
             LOG.info("  Bucket: {}", testBucket);
-            
+
             // Try to connect to MinIO to verify availability
             try {
                 minioAvailable = checkMinioConnection();
@@ -238,7 +238,7 @@ class LanceCatalogS3Test {
             assertThat(LanceCatalogFactory.S3_SECRET_KEY.key()).isEqualTo("s3-secret-key");
             assertThat(LanceCatalogFactory.S3_REGION.key()).isEqualTo("s3-region");
             assertThat(LanceCatalogFactory.S3_ENDPOINT.key()).isEqualTo("s3-endpoint");
-            
+
             // Verify descriptions are not null
             assertThat(LanceCatalogFactory.S3_ACCESS_KEY.description()).isNotNull();
             assertThat(LanceCatalogFactory.S3_SECRET_KEY.description()).isNotNull();
@@ -645,7 +645,7 @@ class LanceCatalogS3Test {
 
                 String db1 = "db1_" + testId;
                 String db2 = "db2_" + testId;
-                
+
                 catalog1.createDatabase(db1, null, false);
                 catalog2.createDatabase(db2, null, false);
 

@@ -52,7 +52,7 @@ import java.util.List;
 
 /**
  * Type converter between Lance/Arrow and Flink types.
- * 
+ *
  * <p>Supported type mappings:
  * <ul>
  *   <li>Int8 <-> TINYINT</li>
@@ -267,11 +267,11 @@ public class LanceTypeConverter implements Serializable {
     public static Field createVectorField(String name, int dimension, boolean nullable) {
         ArrowType elementType = new ArrowType.FloatingPoint(FloatingPointPrecision.SINGLE);
         Field elementField = new Field("item", new FieldType(false, elementType, null), null);
-        
+
         ArrowType listType = new ArrowType.FixedSizeList(dimension);
         List<Field> children = new ArrayList<>();
         children.add(elementField);
-        
+
         return new Field(name, new FieldType(nullable, listType, null), children);
     }
 
@@ -286,11 +286,11 @@ public class LanceTypeConverter implements Serializable {
     public static Field createFloat64VectorField(String name, int dimension, boolean nullable) {
         ArrowType elementType = new ArrowType.FloatingPoint(FloatingPointPrecision.DOUBLE);
         Field elementField = new Field("item", new FieldType(false, elementType, null), null);
-        
+
         ArrowType listType = new ArrowType.FixedSizeList(dimension);
         List<Field> children = new ArrayList<>();
         children.add(elementField);
-        
+
         return new Field(name, new FieldType(nullable, listType, null), children);
     }
 
@@ -305,18 +305,18 @@ public class LanceTypeConverter implements Serializable {
         if (!(arrowType instanceof ArrowType.FixedSizeList)) {
             return false;
         }
-        
+
         List<Field> children = field.getChildren();
         if (children == null || children.isEmpty()) {
             return false;
         }
-        
+
         ArrowType childType = children.get(0).getType();
         if (childType instanceof ArrowType.FloatingPoint) {
             FloatingPointPrecision precision = ((ArrowType.FloatingPoint) childType).getPrecision();
             return precision == FloatingPointPrecision.SINGLE || precision == FloatingPointPrecision.DOUBLE;
         }
-        
+
         return false;
     }
 
@@ -388,7 +388,7 @@ public class LanceTypeConverter implements Serializable {
                     .toArray(DataTypes.Field[]::new);
             return DataTypes.ROW(fields);
         }
-        
+
         throw new UnsupportedTypeException("Unsupported LogicalType: " + logicalType.getClass().getSimpleName());
     }
 

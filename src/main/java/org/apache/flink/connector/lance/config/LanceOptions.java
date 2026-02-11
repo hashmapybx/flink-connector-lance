@@ -30,7 +30,7 @@ import java.util.Objects;
 
 /**
  * Lance connector configuration options.
- * 
+ *
  * <p>Defines all configuration items for Source, Sink, vector index and vector search.
  */
 public class LanceOptions implements Serializable {
@@ -281,7 +281,9 @@ public class LanceOptions implements Serializable {
                     return mode;
                 }
             }
-            throw new IllegalArgumentException("Unsupported write mode: " + value + ", supported modes: append, overwrite");
+            throw new IllegalArgumentException(
+                    "Unsupported write mode: " + value
+                            + ", supported modes: append, overwrite");
         }
     }
 
@@ -311,7 +313,9 @@ public class LanceOptions implements Serializable {
                     return type;
                 }
             }
-            throw new IllegalArgumentException("Unsupported index type: " + value + ", supported types: IVF_PQ, IVF_HNSW, IVF_FLAT");
+            throw new IllegalArgumentException(
+                    "Unsupported index type: " + value
+                            + ", supported types: IVF_PQ, IVF_HNSW, IVF_FLAT");
         }
     }
 
@@ -341,7 +345,9 @@ public class LanceOptions implements Serializable {
                     return type;
                 }
             }
-            throw new IllegalArgumentException("Unsupported metric type: " + value + ", supported types: L2, Cosine, Dot");
+            throw new IllegalArgumentException(
+                    "Unsupported metric type: " + value
+                            + ", supported types: L2, Cosine, Dot");
         }
     }
 
@@ -719,42 +725,58 @@ public class LanceOptions implements Serializable {
         private void validate() {
             // Validate read batch size
             if (readBatchSize <= 0) {
-                throw new IllegalArgumentException("read.batch-size must be greater than 0, current value: " + readBatchSize);
+                throw new IllegalArgumentException(
+                        "read.batch-size must be greater than 0, current value: "
+                                + readBatchSize);
             }
 
             // Validate Limit (if set)
             if (readLimit != null && readLimit < 0) {
-                throw new IllegalArgumentException("read.limit must be greater than or equal to 0, current value: " + readLimit);
+                throw new IllegalArgumentException(
+                        "read.limit must be >= 0, current value: "
+                                + readLimit);
             }
 
             // Validate write batch size
             if (writeBatchSize <= 0) {
-                throw new IllegalArgumentException("write.batch-size must be greater than 0, current value: " + writeBatchSize);
+                throw new IllegalArgumentException(
+                        "write.batch-size must be greater than 0, current value: "
+                                + writeBatchSize);
             }
 
             // Validate max rows per file
             if (writeMaxRowsPerFile <= 0) {
-                throw new IllegalArgumentException("write.max-rows-per-file must be greater than 0, current value: " + writeMaxRowsPerFile);
+                throw new IllegalArgumentException(
+                        "write.max-rows-per-file must be > 0, current value: "
+                                + writeMaxRowsPerFile);
             }
 
             // Validate index partition count
             if (indexNumPartitions <= 0) {
-                throw new IllegalArgumentException("index.num-partitions must be greater than 0, current value: " + indexNumPartitions);
+                throw new IllegalArgumentException(
+                        "index.num-partitions must be > 0, current value: "
+                                + indexNumPartitions);
             }
 
             // Validate PQ sub-vector count
             if (indexNumSubVectors != null && indexNumSubVectors <= 0) {
-                throw new IllegalArgumentException("index.num-sub-vectors must be greater than 0, current value: " + indexNumSubVectors);
+                throw new IllegalArgumentException(
+                        "index.num-sub-vectors must be > 0, current value: "
+                                + indexNumSubVectors);
             }
 
             // Validate PQ quantization bits
             if (indexNumBits <= 0 || indexNumBits > 16) {
-                throw new IllegalArgumentException("index.num-bits must be between 1 and 16, current value: " + indexNumBits);
+                throw new IllegalArgumentException(
+                        "index.num-bits must be between 1 and 16, current value: "
+                                + indexNumBits);
             }
 
             // Validate HNSW parameters
             if (indexMaxLevel <= 0) {
-                throw new IllegalArgumentException("index.max-level must be greater than 0, current value: " + indexMaxLevel);
+                throw new IllegalArgumentException(
+                        "index.max-level must be > 0, current value: "
+                                + indexMaxLevel);
             }
 
             if (indexM <= 0) {
@@ -762,12 +784,16 @@ public class LanceOptions implements Serializable {
             }
 
             if (indexEfConstruction <= 0) {
-                throw new IllegalArgumentException("index.ef-construction must be greater than 0, current value: " + indexEfConstruction);
+                throw new IllegalArgumentException(
+                        "index.ef-construction must be > 0, current value: "
+                                + indexEfConstruction);
             }
 
             // Validate vector search parameters
             if (vectorNprobes <= 0) {
-                throw new IllegalArgumentException("vector.nprobes must be greater than 0, current value: " + vectorNprobes);
+                throw new IllegalArgumentException(
+                        "vector.nprobes must be > 0, current value: "
+                                + vectorNprobes);
             }
 
             if (vectorEf <= 0) {
@@ -775,7 +801,9 @@ public class LanceOptions implements Serializable {
             }
 
             if (vectorRefineFactor != null && vectorRefineFactor <= 0) {
-                throw new IllegalArgumentException("vector.refine-factor must be greater than 0, current value: " + vectorRefineFactor);
+                throw new IllegalArgumentException(
+                        "vector.refine-factor must be > 0, current value: "
+                                + vectorRefineFactor);
             }
         }
     }

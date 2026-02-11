@@ -18,7 +18,6 @@
 
 package org.apache.flink.connector.lance;
 
-import org.apache.flink.api.common.typeinfo.TypeInformation;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.connector.lance.config.LanceOptions;
 import org.apache.flink.connector.lance.converter.LanceTypeConverter;
@@ -47,10 +46,10 @@ import java.util.List;
 
 /**
  * Lance data source implementation.
- * 
+ *
  * <p>Reads data from Lance dataset and converts to Flink RowData.
  * <p>Supports column pruning, predicate push-down and Limit push-down optimization.
- * 
+ *
  * <p>Usage example:
  * <pre>{@code
  * LanceOptions options = LanceOptions.builder()
@@ -58,7 +57,7 @@ import java.util.List;
  *     .readBatchSize(1024)
  *     .readLimit(100L)  // Limit push-down
  *     .build();
- * 
+ *
  * LanceSource source = new LanceSource(options, rowType);
  * DataStream<RowData> stream = env.addSource(source);
  * }</pre>
@@ -88,10 +87,10 @@ public class LanceSource extends RichParallelSourceFunction<RowData> {
     public LanceSource(LanceOptions options, RowType rowType) {
         this.options = options;
         this.rowType = rowType;
-        
+
         List<String> columns = options.getReadColumns();
-        this.selectedColumns = columns != null && !columns.isEmpty() 
-                ? columns.toArray(new String[0]) 
+        this.selectedColumns = columns != null && !columns.isEmpty()
+                ? columns.toArray(new String[0])
                 : null;
         this.readLimit = options.getReadLimit();
     }
@@ -108,29 +107,29 @@ public class LanceSource extends RichParallelSourceFunction<RowData> {
     @Override
     public void open(Configuration parameters) throws Exception {
         super.open(parameters);
-        
+
         LOG.info("Opening Lance data source: {}", options.getPath());
         if (readLimit != null) {
             LOG.info("Limit push-down enabled, max read rows: {}", readLimit);
         }
-        
+
         this.running = true;
         this.emittedCount = 0;
         this.allocator = new RootAllocator(Long.MAX_VALUE);
-        
+
         // Open Lance dataset
         String datasetPath = options.getPath();
         if (datasetPath == null || datasetPath.isEmpty()) {
             throw new IllegalArgumentException("Lance dataset path cannot be empty");
         }
-        
+
         Path path = Paths.get(datasetPath);
         try {
             this.dataset = Dataset.open(path.toString(), allocator);
         } catch (Exception e) {
             throw new IOException("Cannot open Lance dataset: " + datasetPath, e);
         }
-        
+
         // Initialize RowDataConverter
         RowType actualRowType = this.rowType;
         if (actualRowType == null) {
@@ -139,19 +138,19 @@ public class LanceSource extends RichParallelSourceFunction<RowData> {
             actualRowType = LanceTypeConverter.toFlinkRowType(arrowSchema);
         }
         this.converter = new RowDataConverter(actualRowType);
-        
+
         LOG.info("Lance data source opened, Schema: {}", actualRowType);
     }
 
     @Override
     public void run(SourceContext<RowData> ctx) throws Exception {
         LOG.info("Start reading Lance dataset: {}", options.getPath());
-        
+
         int subtaskIndex = getRuntimeContext().getIndexOfThisSubtask();
         int numSubtasks = getRuntimeContext().getNumberOfParallelSubtasks();
-        
+
         String filter = options.getReadFilter();
-        
+
         // If filter condition exists, use Dataset level scan (only execute on first subtask to avoid duplicate data)
         if (filter != null && !filter.isEmpty()) {
             if (subtaskIndex == 0) {
@@ -171,21 +170,21 @@ public class LanceSource extends RichParallelSourceFunction<RowData> {
         } else {
             // Without filter condition and Limit, use Fragment level parallel scan
             List<Fragment> fragments = dataset.getFragments();
-            LOG.info("Dataset has {} Fragments, current subtask {}/{}", 
+            LOG.info("Dataset has {} Fragments, current subtask {}/{}",
                     fragments.size(), subtaskIndex, numSubtasks);
-            
+
             // Assign Fragments by subtask
             for (int i = 0; i < fragments.size() && running && !isLimitReached(); i++) {
                 // Simple round-robin assignment strategy
                 if (i % numSubtasks != subtaskIndex) {
                     continue;
                 }
-                
+
                 Fragment fragment = fragments.get(i);
                 readFragment(ctx, fragment);
             }
         }
-        
+
         LOG.info("Lance data source read completed, total emitted {} rows", emittedCount);
     }
 
@@ -195,30 +194,30 @@ public class LanceSource extends RichParallelSourceFunction<RowData> {
     private void readDatasetWithFilter(SourceContext<RowData> ctx) throws Exception {
         // Build scan options
         ScanOptions.Builder scanOptionsBuilder = new ScanOptions.Builder();
-        
+
         // Set batch size
         scanOptionsBuilder.batchSize(options.getReadBatchSize());
-        
+
         // Set column filter
         if (selectedColumns != null && selectedColumns.length > 0) {
             scanOptionsBuilder.columns(Arrays.asList(selectedColumns));
         }
-        
+
         // Set data filter condition
         String filter = options.getReadFilter();
         if (filter != null && !filter.isEmpty()) {
             LOG.info("Applying filter condition: {}", filter);
             scanOptionsBuilder.filter(filter);
         }
-        
+
         ScanOptions scanOptions = scanOptionsBuilder.build();
-        
+
         // Use Dataset level scan
         try (LanceScanner scanner = dataset.newScan(scanOptions)) {
             try (ArrowReader reader = scanner.scanBatches()) {
                 while (reader.loadNextBatch() && running && !isLimitReached()) {
                     VectorSchemaRoot root = reader.getVectorSchemaRoot();
-                    
+
                     // Convert to RowData and output
                     List<RowData> rows = converter.toRowDataList(root);
                     synchronized (ctx.getCheckpointLock()) {
@@ -233,7 +232,7 @@ public class LanceSource extends RichParallelSourceFunction<RowData> {
                 }
             }
         }
-        
+
         if (isLimitReached()) {
             LOG.info("Reached Limit ({}), stop reading", readLimit);
         }
@@ -244,28 +243,28 @@ public class LanceSource extends RichParallelSourceFunction<RowData> {
      */
     private void readFragment(SourceContext<RowData> ctx, Fragment fragment) throws Exception {
         LOG.debug("Reading Fragment: {}", fragment.getId());
-        
+
         // Build scan options
         ScanOptions.Builder scanOptionsBuilder = new ScanOptions.Builder();
-        
+
         // Set batch size
         scanOptionsBuilder.batchSize(options.getReadBatchSize());
-        
+
         // Set column filter
         if (selectedColumns != null && selectedColumns.length > 0) {
             scanOptionsBuilder.columns(Arrays.asList(selectedColumns));
         }
-        
+
         // Note: Fragment level scan does not use filter, filter is only supported at Dataset level
-        
+
         ScanOptions scanOptions = scanOptionsBuilder.build();
-        
+
         // Create Scanner and read data
         try (LanceScanner scanner = fragment.newScan(scanOptions)) {
             try (ArrowReader reader = scanner.scanBatches()) {
                 while (reader.loadNextBatch() && running && !isLimitReached()) {
                     VectorSchemaRoot root = reader.getVectorSchemaRoot();
-                    
+
                     // Convert to RowData and output
                     List<RowData> rows = converter.toRowDataList(root);
                     synchronized (ctx.getCheckpointLock()) {
@@ -298,9 +297,9 @@ public class LanceSource extends RichParallelSourceFunction<RowData> {
     @Override
     public void close() throws Exception {
         LOG.info("Closing Lance data source");
-        
+
         this.running = false;
-        
+
         if (dataset != null) {
             try {
                 dataset.close();
@@ -309,7 +308,7 @@ public class LanceSource extends RichParallelSourceFunction<RowData> {
             }
             dataset = null;
         }
-        
+
         if (allocator != null) {
             try {
                 allocator.close();
@@ -318,7 +317,7 @@ public class LanceSource extends RichParallelSourceFunction<RowData> {
             }
             allocator = null;
         }
-        
+
         super.close();
     }
 

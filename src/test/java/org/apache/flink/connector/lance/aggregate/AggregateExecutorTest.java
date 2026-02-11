@@ -89,19 +89,19 @@ class AggregateExecutorTest {
             AggregateInfo aggInfo = AggregateInfo.builder()
                     .addCountStar("cnt")
                     .build();
-            
+
             AggregateExecutor executor = new AggregateExecutor(aggInfo, sourceRowType);
             executor.init();
-            
+
             // Accumulate 5 rows of data
             executor.accumulate(createRow(1, "Alice", "A", 100.0, 10));
             executor.accumulate(createRow(2, "Bob", "B", 200.0, 20));
             executor.accumulate(createRow(3, "Charlie", "A", 150.0, 15));
             executor.accumulate(createRow(4, "David", "B", 180.0, 18));
             executor.accumulate(createRow(5, "Eve", "C", 220.0, 22));
-            
+
             List<RowData> results = executor.getResults();
-            
+
             assertEquals(1, results.size());
             assertEquals(5L, results.get(0).getLong(0));  // COUNT(*)
         }
@@ -112,16 +112,16 @@ class AggregateExecutorTest {
             AggregateInfo aggInfo = AggregateInfo.builder()
                     .addCount("name", "name_count")
                     .build();
-            
+
             AggregateExecutor executor = new AggregateExecutor(aggInfo, sourceRowType);
             executor.init();
-            
+
             executor.accumulate(createRow(1, "Alice", "A", 100.0, 10));
             executor.accumulate(createRow(2, "Bob", "B", 200.0, 20));
             executor.accumulate(createRow(3, "Charlie", "A", 150.0, 15));
-            
+
             List<RowData> results = executor.getResults();
-            
+
             assertEquals(1, results.size());
             assertEquals(3L, results.get(0).getLong(0));
         }
@@ -132,12 +132,12 @@ class AggregateExecutorTest {
             AggregateInfo aggInfo = AggregateInfo.builder()
                     .addCountStar("cnt")
                     .build();
-            
+
             AggregateExecutor executor = new AggregateExecutor(aggInfo, sourceRowType);
             executor.init();
-            
+
             List<RowData> results = executor.getResults();
-            
+
             assertEquals(1, results.size());
             assertEquals(0L, results.get(0).getLong(0));
         }
@@ -155,16 +155,16 @@ class AggregateExecutorTest {
             AggregateInfo aggInfo = AggregateInfo.builder()
                     .addSum("amount", "total_amount")
                     .build();
-            
+
             AggregateExecutor executor = new AggregateExecutor(aggInfo, sourceRowType);
             executor.init();
-            
+
             executor.accumulate(createRow(1, "Alice", "A", 100.0, 10));
             executor.accumulate(createRow(2, "Bob", "B", 200.0, 20));
             executor.accumulate(createRow(3, "Charlie", "A", 150.0, 15));
-            
+
             List<RowData> results = executor.getResults();
-            
+
             assertEquals(1, results.size());
             assertEquals(450.0, results.get(0).getDouble(0), 0.001);
         }
@@ -175,12 +175,12 @@ class AggregateExecutorTest {
             AggregateInfo aggInfo = AggregateInfo.builder()
                     .addSum("amount", "total_amount")
                     .build();
-            
+
             AggregateExecutor executor = new AggregateExecutor(aggInfo, sourceRowType);
             executor.init();
-            
+
             List<RowData> results = executor.getResults();
-            
+
             assertEquals(1, results.size());
             assertTrue(results.get(0).isNullAt(0));
         }
@@ -198,16 +198,16 @@ class AggregateExecutorTest {
             AggregateInfo aggInfo = AggregateInfo.builder()
                     .addAvg("amount", "avg_amount")
                     .build();
-            
+
             AggregateExecutor executor = new AggregateExecutor(aggInfo, sourceRowType);
             executor.init();
-            
+
             executor.accumulate(createRow(1, "Alice", "A", 100.0, 10));
             executor.accumulate(createRow(2, "Bob", "B", 200.0, 20));
             executor.accumulate(createRow(3, "Charlie", "A", 150.0, 15));
-            
+
             List<RowData> results = executor.getResults();
-            
+
             assertEquals(1, results.size());
             assertEquals(150.0, results.get(0).getDouble(0), 0.001);  // (100+200+150)/3
         }
@@ -218,12 +218,12 @@ class AggregateExecutorTest {
             AggregateInfo aggInfo = AggregateInfo.builder()
                     .addAvg("amount", "avg_amount")
                     .build();
-            
+
             AggregateExecutor executor = new AggregateExecutor(aggInfo, sourceRowType);
             executor.init();
-            
+
             List<RowData> results = executor.getResults();
-            
+
             assertEquals(1, results.size());
             assertTrue(results.get(0).isNullAt(0));
         }
@@ -241,16 +241,16 @@ class AggregateExecutorTest {
             AggregateInfo aggInfo = AggregateInfo.builder()
                     .addMin("amount", "min_amount")
                     .build();
-            
+
             AggregateExecutor executor = new AggregateExecutor(aggInfo, sourceRowType);
             executor.init();
-            
+
             executor.accumulate(createRow(1, "Alice", "A", 100.0, 10));
             executor.accumulate(createRow(2, "Bob", "B", 200.0, 20));
             executor.accumulate(createRow(3, "Charlie", "A", 50.0, 15));
-            
+
             List<RowData> results = executor.getResults();
-            
+
             assertEquals(1, results.size());
             assertEquals(50.0, results.get(0).getDouble(0), 0.001);
         }
@@ -261,16 +261,16 @@ class AggregateExecutorTest {
             AggregateInfo aggInfo = AggregateInfo.builder()
                     .addMax("amount", "max_amount")
                     .build();
-            
+
             AggregateExecutor executor = new AggregateExecutor(aggInfo, sourceRowType);
             executor.init();
-            
+
             executor.accumulate(createRow(1, "Alice", "A", 100.0, 10));
             executor.accumulate(createRow(2, "Bob", "B", 200.0, 20));
             executor.accumulate(createRow(3, "Charlie", "A", 50.0, 15));
-            
+
             List<RowData> results = executor.getResults();
-            
+
             assertEquals(1, results.size());
             assertEquals(200.0, results.get(0).getDouble(0), 0.001);
         }
@@ -282,12 +282,12 @@ class AggregateExecutorTest {
                     .addMin("amount", "min_amount")
                     .addMax("amount", "max_amount")
                     .build();
-            
+
             AggregateExecutor executor = new AggregateExecutor(aggInfo, sourceRowType);
             executor.init();
-            
+
             List<RowData> results = executor.getResults();
-            
+
             assertEquals(1, results.size());
             assertTrue(results.get(0).isNullAt(0));  // MIN
             assertTrue(results.get(0).isNullAt(1));  // MAX
@@ -307,20 +307,20 @@ class AggregateExecutorTest {
                     .addCountStar("cnt")
                     .groupBy("category")
                     .build();
-            
+
             AggregateExecutor executor = new AggregateExecutor(aggInfo, sourceRowType);
             executor.init();
-            
+
             executor.accumulate(createRow(1, "Alice", "A", 100.0, 10));
             executor.accumulate(createRow(2, "Bob", "B", 200.0, 20));
             executor.accumulate(createRow(3, "Charlie", "A", 150.0, 15));
             executor.accumulate(createRow(4, "David", "B", 180.0, 18));
             executor.accumulate(createRow(5, "Eve", "A", 220.0, 22));
-            
+
             List<RowData> results = executor.getResults();
-            
+
             assertEquals(2, results.size());  // 2 groups: A and B
-            
+
             // Verify count for each group
             long countA = 0, countB = 0;
             for (RowData row : results) {
@@ -343,18 +343,18 @@ class AggregateExecutorTest {
                     .addSum("amount", "total_amount")
                     .groupBy("category")
                     .build();
-            
+
             AggregateExecutor executor = new AggregateExecutor(aggInfo, sourceRowType);
             executor.init();
-            
+
             executor.accumulate(createRow(1, "Alice", "A", 100.0, 10));
             executor.accumulate(createRow(2, "Bob", "B", 200.0, 20));
             executor.accumulate(createRow(3, "Charlie", "A", 150.0, 15));
-            
+
             List<RowData> results = executor.getResults();
-            
+
             assertEquals(2, results.size());
-            
+
             // Verify sum for each group
             for (RowData row : results) {
                 String category = row.getString(0).toString();
@@ -374,12 +374,12 @@ class AggregateExecutorTest {
                     .addCountStar("cnt")
                     .groupBy("category")
                     .build();
-            
+
             AggregateExecutor executor = new AggregateExecutor(aggInfo, sourceRowType);
             executor.init();
-            
+
             List<RowData> results = executor.getResults();
-            
+
             assertTrue(results.isEmpty());
         }
     }
@@ -400,19 +400,19 @@ class AggregateExecutorTest {
                     .addMin("amount", "min_amount")
                     .addMax("amount", "max_amount")
                     .build();
-            
+
             AggregateExecutor executor = new AggregateExecutor(aggInfo, sourceRowType);
             executor.init();
-            
+
             executor.accumulate(createRow(1, "Alice", "A", 100.0, 10));
             executor.accumulate(createRow(2, "Bob", "B", 200.0, 20));
             executor.accumulate(createRow(3, "Charlie", "A", 150.0, 15));
-            
+
             List<RowData> results = executor.getResults();
-            
+
             assertEquals(1, results.size());
             RowData result = results.get(0);
-            
+
             assertEquals(3L, result.getLong(0));           // COUNT(*)
             assertEquals(450.0, result.getDouble(1), 0.001); // SUM
             assertEquals(150.0, result.getDouble(2), 0.001); // AVG
@@ -429,24 +429,24 @@ class AggregateExecutorTest {
                     .addAvg("amount", "avg_amount")
                     .groupBy("category")
                     .build();
-            
+
             AggregateExecutor executor = new AggregateExecutor(aggInfo, sourceRowType);
             executor.init();
-            
+
             executor.accumulate(createRow(1, "Alice", "A", 100.0, 10));
             executor.accumulate(createRow(2, "Bob", "B", 200.0, 20));
             executor.accumulate(createRow(3, "Charlie", "A", 200.0, 15));
-            
+
             List<RowData> results = executor.getResults();
-            
+
             assertEquals(2, results.size());
-            
+
             for (RowData row : results) {
                 String category = row.getString(0).toString();
                 long count = row.getLong(1);
                 double sum = row.getDouble(2);
                 double avg = row.getDouble(3);
-                
+
                 if ("A".equals(category)) {
                     assertEquals(2, count);
                     assertEquals(300.0, sum, 0.001);
@@ -472,22 +472,22 @@ class AggregateExecutorTest {
             AggregateInfo aggInfo = AggregateInfo.builder()
                     .addCountStar("cnt")
                     .build();
-            
+
             AggregateExecutor executor = new AggregateExecutor(aggInfo, sourceRowType);
             executor.init();
-            
+
             executor.accumulate(createRow(1, "Alice", "A", 100.0, 10));
             executor.accumulate(createRow(2, "Bob", "B", 200.0, 20));
-            
+
             // Reset
             executor.reset();
-            
+
             // Re-initialize and accumulate new data
             executor.init();
             executor.accumulate(createRow(3, "Charlie", "A", 150.0, 15));
-            
+
             List<RowData> results = executor.getResults();
-            
+
             assertEquals(1, results.size());
             assertEquals(1L, results.get(0).getLong(0));  // Only 1 row after reset
         }
@@ -507,22 +507,22 @@ class AggregateExecutorTest {
                     .addSum("amount", "sum_amount")
                     .groupBy("category")
                     .build();
-            
+
             AggregateExecutor executor = new AggregateExecutor(aggInfo, sourceRowType);
             executor.init();
-            
+
             RowType resultType = executor.buildResultRowType();
-            
+
             assertNotNull(resultType);
             assertEquals(3, resultType.getFieldCount());
-            
+
             // First field is group column category
             assertEquals("category", resultType.getFieldNames().get(0));
-            
+
             // Second field is COUNT result
             assertEquals("cnt", resultType.getFieldNames().get(1));
             assertTrue(resultType.getTypeAt(1) instanceof BigIntType);
-            
+
             // Third field is SUM result
             assertEquals("sum_amount", resultType.getFieldNames().get(2));
             assertTrue(resultType.getTypeAt(2) instanceof DoubleType);

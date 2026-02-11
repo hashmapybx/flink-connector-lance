@@ -41,14 +41,14 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
-import java.nio.file.Paths;
 import java.util.Arrays;
 import java.util.List;
 
 /**
  * Lance data source with aggregate push-down support.
  *
- * <p>Executes aggregate computation at the data source, supporting COUNT, SUM, AVG, MIN, MAX and other aggregate functions.
+ * <p>Executes aggregate computation at the data source,
+ * supporting COUNT, SUM, AVG, MIN, MAX and other aggregate functions.
  *
  * <p>Usage example:
  * <pre>{@code

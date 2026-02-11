@@ -41,7 +41,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
-import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Iterator;
@@ -49,7 +48,7 @@ import java.util.List;
 
 /**
  * Lance InputFormat implementation.
- * 
+ *
  * <p>Reads data from Lance dataset using InputFormat interface, supports parallel reading with splits.
  */
 public class LanceInputFormat extends RichInputFormat<RowData, LanceSplit> {
@@ -78,10 +77,10 @@ public class LanceInputFormat extends RichInputFormat<RowData, LanceSplit> {
     public LanceInputFormat(LanceOptions options, RowType rowType) {
         this.options = options;
         this.rowType = rowType;
-        
+
         List<String> columns = options.getReadColumns();
-        this.selectedColumns = columns != null && !columns.isEmpty() 
-                ? columns.toArray(new String[0]) 
+        this.selectedColumns = columns != null && !columns.isEmpty()
+                ? columns.toArray(new String[0])
                 : null;
     }
 
@@ -99,7 +98,7 @@ public class LanceInputFormat extends RichInputFormat<RowData, LanceSplit> {
     @Override
     public LanceSplit[] createInputSplits(int minNumSplits) throws IOException {
         LOG.info("Creating input splits, minimum split count: {}", minNumSplits);
-        
+
         String datasetPath = options.getPath();
         if (datasetPath == null || datasetPath.isEmpty()) {
             throw new IOException("Dataset path cannot be empty");
@@ -111,13 +110,13 @@ public class LanceInputFormat extends RichInputFormat<RowData, LanceSplit> {
             try {
                 List<Fragment> fragments = tempDataset.getFragments();
                 LanceSplit[] splits = new LanceSplit[fragments.size()];
-                
+
                 for (int i = 0; i < fragments.size(); i++) {
                     Fragment fragment = fragments.get(i);
                     long rowCount = fragment.countRows();
                     splits[i] = new LanceSplit(i, fragment.getId(), datasetPath, rowCount);
                 }
-                
+
                 LOG.info("Created {} input splits", splits.length);
                 return splits;
             } finally {
@@ -136,10 +135,10 @@ public class LanceInputFormat extends RichInputFormat<RowData, LanceSplit> {
     @Override
     public void open(LanceSplit split) throws IOException {
         LOG.info("Opening split: {}", split);
-        
+
         this.allocator = new RootAllocator(Long.MAX_VALUE);
         this.reachedEnd = false;
-        
+
         // Open dataset
         String datasetPath = split.getDatasetPath();
         try {
@@ -147,7 +146,7 @@ public class LanceInputFormat extends RichInputFormat<RowData, LanceSplit> {
         } catch (Exception e) {
             throw new IOException("Cannot open dataset: " + datasetPath, e);
         }
-        
+
         // Initialize converter
         RowType actualRowType = this.rowType;
         if (actualRowType == null) {
@@ -155,7 +154,7 @@ public class LanceInputFormat extends RichInputFormat<RowData, LanceSplit> {
             actualRowType = LanceTypeConverter.toFlinkRowType(arrowSchema);
         }
         this.converter = new RowDataConverter(actualRowType);
-        
+
         // Get specified Fragment
         List<Fragment> fragments = dataset.getFragments();
         Fragment targetFragment = null;
@@ -165,26 +164,26 @@ public class LanceInputFormat extends RichInputFormat<RowData, LanceSplit> {
                 break;
             }
         }
-        
+
         if (targetFragment == null) {
             throw new IOException("Cannot find Fragment: " + split.getFragmentId());
         }
-        
+
         // Build scan options
         ScanOptions.Builder scanOptionsBuilder = new ScanOptions.Builder();
         scanOptionsBuilder.batchSize(options.getReadBatchSize());
-        
+
         if (selectedColumns != null && selectedColumns.length > 0) {
             scanOptionsBuilder.columns(Arrays.asList(selectedColumns));
         }
-        
+
         String filter = options.getReadFilter();
         if (filter != null && !filter.isEmpty()) {
             scanOptionsBuilder.filter(filter);
         }
-        
+
         ScanOptions scanOptions = scanOptionsBuilder.build();
-        
+
         // Create Scanner
         try {
             this.currentScanner = targetFragment.newScan(scanOptions);
@@ -192,7 +191,7 @@ public class LanceInputFormat extends RichInputFormat<RowData, LanceSplit> {
         } catch (Exception e) {
             throw new IOException("Failed to create Scanner", e);
         }
-        
+
         // Load first batch of data
         loadNextBatch();
     }
@@ -225,30 +224,30 @@ public class LanceInputFormat extends RichInputFormat<RowData, LanceSplit> {
         if (reachedEnd) {
             return null;
         }
-        
+
         // Current batch still has data
         if (currentBatchIterator != null && currentBatchIterator.hasNext()) {
             return currentBatchIterator.next();
         }
-        
+
         // Load next batch
         loadNextBatch();
-        
+
         if (reachedEnd) {
             return null;
         }
-        
+
         if (currentBatchIterator != null && currentBatchIterator.hasNext()) {
             return currentBatchIterator.next();
         }
-        
+
         return null;
     }
 
     @Override
     public void close() throws IOException {
         LOG.info("Closing LanceInputFormat");
-        
+
         if (currentReader != null) {
             try {
                 currentReader.close();
@@ -257,7 +256,7 @@ public class LanceInputFormat extends RichInputFormat<RowData, LanceSplit> {
             }
             currentReader = null;
         }
-        
+
         if (currentScanner != null) {
             try {
                 currentScanner.close();
@@ -266,7 +265,7 @@ public class LanceInputFormat extends RichInputFormat<RowData, LanceSplit> {
             }
             currentScanner = null;
         }
-        
+
         if (dataset != null) {
             try {
                 dataset.close();
@@ -275,7 +274,7 @@ public class LanceInputFormat extends RichInputFormat<RowData, LanceSplit> {
             }
             dataset = null;
         }
-        
+
         if (allocator != null) {
             try {
                 allocator.close();
@@ -306,7 +305,7 @@ public class LanceInputFormat extends RichInputFormat<RowData, LanceSplit> {
     private static class LanceSplitAssigner implements InputSplitAssigner {
         private final List<LanceSplit> remainingSplits;
 
-        public LanceSplitAssigner(LanceSplit[] splits) {
+        LanceSplitAssigner(LanceSplit[] splits) {
             this.remainingSplits = new ArrayList<>();
             for (LanceSplit split : splits) {
                 remainingSplits.add(split);

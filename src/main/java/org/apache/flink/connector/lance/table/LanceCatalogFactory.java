@@ -31,9 +31,9 @@ import java.util.Set;
 
 /**
  * Lance Catalog factory.
- * 
+ *
  * <p>Used to create LanceCatalog via SQL DDL.
- * 
+ *
  * <p>Usage example (local path):
  * <pre>{@code
  * CREATE CATALOG lance_catalog WITH (
@@ -42,7 +42,7 @@ import java.util.Set;
  *     'default-database' = 'default'
  * );
  * }</pre>
- * 
+ *
  * <p>Usage example (S3 path):
  * <pre>{@code
  * CREATE CATALOG lance_s3_catalog WITH (
@@ -73,7 +73,7 @@ public class LanceCatalogFactory implements CatalogFactory {
             .withDescription("Default database name");
 
     // ==================== S3 Configuration Options ====================
-    
+
     public static final ConfigOption<String> S3_ACCESS_KEY = ConfigOptions
             .key("s3-access-key")
             .stringType()
@@ -147,7 +147,7 @@ public class LanceCatalogFactory implements CatalogFactory {
 
         // Collect storage configuration
         Map<String, String> storageOptions = new HashMap<>();
-        
+
         // S3 configuration
         String accessKey = helper.getOptions().get(S3_ACCESS_KEY);
         String secretKey = helper.getOptions().get(S3_SECRET_KEY);

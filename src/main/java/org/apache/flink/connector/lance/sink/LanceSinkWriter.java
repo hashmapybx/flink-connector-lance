@@ -200,8 +200,12 @@ public class LanceSinkWriter implements SinkWriter<RowData> {
                             existingDataset.close();
                         }
 
-                        FragmentOperation.Append append = new FragmentOperation.Append(fragments);
-                        dataset = append.commit(allocator, datasetPath, Optional.of(readVersion), Collections.emptyMap());
+                        FragmentOperation.Append append =
+                                new FragmentOperation.Append(fragments);
+                        dataset = append.commit(
+                                allocator, datasetPath,
+                                Optional.of(readVersion),
+                                Collections.emptyMap());
                     }
                 }
 

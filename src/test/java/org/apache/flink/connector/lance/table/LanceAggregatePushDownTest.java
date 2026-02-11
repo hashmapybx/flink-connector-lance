@@ -80,7 +80,7 @@ class LanceAggregatePushDownTest {
         @DisplayName("Initial state should have no aggregate push-down")
         void testInitialState() {
             LanceDynamicTableSource source = new LanceDynamicTableSource(options, physicalDataType);
-            
+
             assertFalse(source.isAggregatePushDownAccepted());
             assertNull(source.getAggregateInfo());
         }
@@ -89,10 +89,10 @@ class LanceAggregatePushDownTest {
         @DisplayName("copy should correctly copy aggregate state")
         void testCopyAggregateState() {
             LanceDynamicTableSource source = new LanceDynamicTableSource(options, physicalDataType);
-            
+
             // Copy source
             LanceDynamicTableSource copied = (LanceDynamicTableSource) source.copy();
-            
+
             // Verify copied state
             assertFalse(copied.isAggregatePushDownAccepted());
             assertNull(copied.getAggregateInfo());
@@ -103,9 +103,9 @@ class LanceAggregatePushDownTest {
         @DisplayName("asSummaryString should return correct summary")
         void testAsSummaryString() {
             LanceDynamicTableSource source = new LanceDynamicTableSource(options, physicalDataType);
-            
+
             String summary = source.asSummaryString();
-            
+
             assertEquals("Lance Table Source", summary);
         }
     }
@@ -122,7 +122,7 @@ class LanceAggregatePushDownTest {
             AggregateInfo aggInfo = AggregateInfo.builder()
                     .addCountStar("cnt")
                     .build();
-            
+
             assertTrue(aggInfo.isSimpleCountStar());
             assertFalse(aggInfo.hasGroupBy());
             assertEquals(1, aggInfo.getAggregateCalls().size());
@@ -137,7 +137,7 @@ class LanceAggregatePushDownTest {
                     .groupBy("category")
                     .groupByFieldIndices(new int[]{2})  // category at index 2
                     .build();
-            
+
             assertFalse(aggInfo.isSimpleCountStar());
             assertTrue(aggInfo.hasGroupBy());
             assertEquals(2, aggInfo.getAggregateCalls().size());
@@ -154,9 +154,9 @@ class LanceAggregatePushDownTest {
                     .addMin("amount", "min_amount")
                     .addMax("amount", "max_amount")
                     .build();
-            
+
             assertEquals(5, aggInfo.getAggregateCalls().size());
-            
+
             // Verify each aggregate function type
             List<AggregateInfo.AggregateCall> calls = aggInfo.getAggregateCalls();
             assertEquals(AggregateInfo.AggregateFunction.COUNT, calls.get(0).getFunction());
@@ -174,9 +174,9 @@ class LanceAggregatePushDownTest {
                     .addAvg("quantity", "avg_quantity")
                     .groupBy("category")
                     .build();
-            
+
             List<String> required = aggInfo.getRequiredColumns();
-            
+
             assertTrue(required.contains("category"));
             assertTrue(required.contains("amount"));
             assertTrue(required.contains("quantity"));
@@ -193,10 +193,10 @@ class LanceAggregatePushDownTest {
         @DisplayName("Aggregate push-down with filter push-down combination")
         void testAggregatePushDownWithFilter() {
             LanceDynamicTableSource source = new LanceDynamicTableSource(options, physicalDataType);
-            
+
             // Simulate adding filter conditions (through internal filters list)
             // Note: Actual filter push-down is done through applyFilters method
-            
+
             // Verify source can support both filter and aggregate push-down
             assertNotNull(source.getOptions());
         }
@@ -205,10 +205,10 @@ class LanceAggregatePushDownTest {
         @DisplayName("Aggregate push-down with column pruning combination")
         void testAggregatePushDownWithProjection() {
             LanceDynamicTableSource source = new LanceDynamicTableSource(options, physicalDataType);
-            
+
             // Apply column pruning
             source.applyProjection(new int[][]{{0}, {3}, {4}});  // id, amount, quantity
-            
+
             // Verify source still works correctly
             assertNotNull(source.getOptions());
         }
@@ -217,10 +217,10 @@ class LanceAggregatePushDownTest {
         @DisplayName("Aggregate push-down with Limit combination")
         void testAggregatePushDownWithLimit() {
             LanceDynamicTableSource source = new LanceDynamicTableSource(options, physicalDataType);
-            
+
             // Apply Limit
             source.applyLimit(100);
-            
+
             assertEquals(Long.valueOf(100), source.getLimit());
         }
     }
@@ -239,7 +239,7 @@ class LanceAggregatePushDownTest {
                     .groupBy("category", "name")
                     .groupByFieldIndices(new int[]{2, 1})
                     .build();
-            
+
             assertEquals(2, aggInfo.getGroupByColumns().size());
             assertArrayEquals(new int[]{2, 1}, aggInfo.getGroupByFieldIndices());
         }
@@ -254,9 +254,9 @@ class LanceAggregatePushDownTest {
                     .addMax("amount", "max_amount")
                     .addCount("amount", "count_amount")
                     .build();
-            
+
             assertEquals(5, aggInfo.getAggregateCalls().size());
-            
+
             // Verify getRequiredColumns contains amount only once
             List<String> required = aggInfo.getRequiredColumns();
             long amountCount = required.stream().filter(c -> c.equals("amount")).count();
@@ -269,7 +269,7 @@ class LanceAggregatePushDownTest {
             AggregateInfo aggInfo = AggregateInfo.builder()
                     .addCountStar("cnt")
                     .build();
-            
+
             assertFalse(aggInfo.hasGroupBy());
             assertTrue(aggInfo.getGroupByColumns().isEmpty());
             assertEquals(0, aggInfo.getGroupByFieldIndices().length);
@@ -288,7 +288,7 @@ class LanceAggregatePushDownTest {
             AggregateInfo aggInfo = AggregateInfo.builder()
                     .addCountStar("cnt")
                     .build();
-            
+
             AggregateInfo.AggregateCall call = aggInfo.getAggregateCalls().get(0);
             assertEquals(AggregateInfo.AggregateFunction.COUNT, call.getFunction());
             assertTrue(call.isCountStar());
@@ -300,7 +300,7 @@ class LanceAggregatePushDownTest {
             AggregateInfo aggInfo = AggregateInfo.builder()
                     .addSum("amount", "sum_amount")
                     .build();
-            
+
             AggregateInfo.AggregateCall call = aggInfo.getAggregateCalls().get(0);
             assertEquals(AggregateInfo.AggregateFunction.SUM, call.getFunction());
             assertEquals("amount", call.getColumn());
@@ -312,7 +312,7 @@ class LanceAggregatePushDownTest {
             AggregateInfo aggInfo = AggregateInfo.builder()
                     .addAvg("amount", "avg_amount")
                     .build();
-            
+
             AggregateInfo.AggregateCall call = aggInfo.getAggregateCalls().get(0);
             assertEquals(AggregateInfo.AggregateFunction.AVG, call.getFunction());
             assertEquals("amount", call.getColumn());
@@ -324,7 +324,7 @@ class LanceAggregatePushDownTest {
             AggregateInfo aggInfo = AggregateInfo.builder()
                     .addMin("amount", "min_amount")
                     .build();
-            
+
             AggregateInfo.AggregateCall call = aggInfo.getAggregateCalls().get(0);
             assertEquals(AggregateInfo.AggregateFunction.MIN, call.getFunction());
             assertEquals("amount", call.getColumn());
@@ -336,7 +336,7 @@ class LanceAggregatePushDownTest {
             AggregateInfo aggInfo = AggregateInfo.builder()
                     .addMax("amount", "max_amount")
                     .build();
-            
+
             AggregateInfo.AggregateCall call = aggInfo.getAggregateCalls().get(0);
             assertEquals(AggregateInfo.AggregateFunction.MAX, call.getFunction());
             assertEquals("amount", call.getColumn());
@@ -348,7 +348,7 @@ class LanceAggregatePushDownTest {
             AggregateInfo aggInfo = AggregateInfo.builder()
                     .addAggregateCall(AggregateInfo.AggregateFunction.COUNT_DISTINCT, "category", "distinct_cnt")
                     .build();
-            
+
             AggregateInfo.AggregateCall call = aggInfo.getAggregateCalls().get(0);
             assertEquals(AggregateInfo.AggregateFunction.COUNT_DISTINCT, call.getFunction());
             assertEquals("category", call.getColumn());
