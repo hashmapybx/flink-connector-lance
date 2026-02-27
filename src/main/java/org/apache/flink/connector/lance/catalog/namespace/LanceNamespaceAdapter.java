@@ -18,6 +18,8 @@
 
 package org.apache.flink.connector.lance.catalog.namespace;
 
+import org.apache.arrow.memory.BufferAllocator;
+import org.apache.arrow.memory.RootAllocator;
 import org.lance.namespace.LanceNamespace;
 import org.lance.namespace.model.CreateNamespaceRequest;
 import org.lance.namespace.model.CreateEmptyTableRequest;
@@ -33,9 +35,6 @@ import org.lance.namespace.model.ListTablesRequest;
 import org.lance.namespace.model.ListTablesResponse;
 import org.lance.namespace.model.NamespaceExistsRequest;
 import org.lance.namespace.model.TableExistsRequest;
-
-import org.apache.arrow.memory.BufferAllocator;
-import org.apache.arrow.memory.RootAllocator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -48,12 +47,12 @@ import java.util.Objects;
 import java.util.Set;
 
 /**
- * Lance Namespace Adapter Implementation.
+ * Adapter for Lance Namespace API.
  * 
- * Directly calls Lance Namespace SDK APIs to implement database and table management.
- * Supports both local file system and REST backend implementations.
+ * Provides unified interface for interacting with Lance Namespace,
+ * supporting both directory-based and REST-based implementations.
  */
-public class LanceNamespaceAdapter implements AbstractLanceNamespaceAdapter {
+public class LanceNamespaceAdapter implements AutoCloseable {
     
     private static final Logger LOG = LoggerFactory.getLogger(LanceNamespaceAdapter.class);
     
@@ -62,12 +61,12 @@ public class LanceNamespaceAdapter implements AbstractLanceNamespaceAdapter {
     private LanceNamespace namespace;
     
     public LanceNamespaceAdapter(BufferAllocator allocator, LanceNamespaceConfig config) {
-        this.allocator = Objects.requireNonNull(allocator, "BufferAllocator cannot be null");
-        this.config = Objects.requireNonNull(config, "LanceNamespaceConfig cannot be null");
+        this.allocator = Objects.requireNonNull(allocator, "Allocator cannot be null");
+        this.config = Objects.requireNonNull(config, "Config cannot be null");
     }
     
     /**
-     * Factory method to create Adapter instance.
+     * Create adapter from properties.
      */
     public static LanceNamespaceAdapter create(Map<String, String> properties) {
         LanceNamespaceConfig config = LanceNamespaceConfig.from(properties);
@@ -76,72 +75,80 @@ public class LanceNamespaceAdapter implements AbstractLanceNamespaceAdapter {
     }
     
     /**
-     * Initialize Lance Namespace connection.
-     * Directly calls LanceNamespace.connect() method.
+     * Initialize the namespace connection.
      */
-    @Override
     public void init() {
         try {
-            if (config.isDirectoryNamespace() && config.getRoot().isPresent()) {
-                // Call: LanceNamespace.connect("file", root_path, allocator)
-                LOG.info("Initializing local file system namespace: {}", config.getRoot().get());
-                namespace = LanceNamespace.connect("file", config.getRoot().get(), allocator);
-            } else if (config.isRestNamespace() && config.getUri().isPresent()) {
-                // Call: LanceNamespace.connect("rest", uri, allocator)
-                LOG.info("Initializing REST namespace: {}", config.getUri().get());
-                namespace = LanceNamespace.connect("rest", config.getUri().get(), allocator);
-            } else {
-                throw new IllegalArgumentException("Invalid namespace configuration");
+            if (namespace != null) {
+                return;
             }
-            
-            LOG.info("Lance Namespace connection successful");
+
+            Map<String, String> properties = new HashMap<>();
+            properties.put(LanceNamespaceConfig.KEY_IMPL, config.getImpl());
+            config.getRoot().ifPresent(root -> properties.put(LanceNamespaceConfig.KEY_ROOT, root));
+            config.getUri().ifPresent(uri -> properties.put(LanceNamespaceConfig.KEY_URI, uri));
+
+            namespace = LanceNamespace.connect(config.getImpl(), properties, allocator);
+            LOG.info("LanceNamespace initialized successfully with impl: {}", config.getImpl());
         } catch (Exception e) {
-            LOG.error("Failed to initialize Lance Namespace", e);
-            throw new RuntimeException("Failed to initialize Lance Namespace", e);
+            LOG.error("Failed to initialize LanceNamespace", e);
+            throw new RuntimeException("Failed to initialize LanceNamespace", e);
         }
     }
     
     /**
-     * List all top-level namespaces.
+     * List all namespaces.
      */
-    @Override
     public List<String> listNamespaces() {
-        return listNamespaces(new String[0]);
+        LOG.debug("Listing root level namespaces");
+        return listNamespacesRecursive(new ArrayList<>());
     }
     
     /**
-     * List child namespaces under a parent namespace.
-     * Directly calls: LanceNamespace.listNamespaces(ListNamespacesRequest)
+     * List namespaces under parent.
      */
-    @Override
     public List<String> listNamespaces(String... parentNamespace) {
+        LOG.debug("Listing namespaces under: {}", Arrays.toString(parentNamespace));
+        return listNamespacesRecursive(Arrays.asList(parentNamespace));
+    }
+    
+    /**
+     * Internal recursive method for listing namespaces.
+     */
+    private List<String> listNamespacesRecursive(List<String> parent) {
         try {
+            if (namespace == null) {
+                init();
+            }
+            
             ListNamespacesRequest request = new ListNamespacesRequest();
-            if (parentNamespace.length > 0) {
-                request.setId(Arrays.asList(parentNamespace));
+            if (!parent.isEmpty()) {
+                request.setId(parent);
             }
             
             ListNamespacesResponse response = namespace.listNamespaces(request);
-            
             if (response.getNamespaces() != null) {
                 Set<String> namespaceSet = response.getNamespaces();
                 return new ArrayList<>(namespaceSet);
             }
             return new ArrayList<>();
-            
         } catch (Exception e) {
-            LOG.warn("Failed to list namespaces", e);
+            LOG.warn("Failed to list namespaces under: {}", parent, e);
             return new ArrayList<>();
         }
     }
     
     /**
      * Check if namespace exists.
-     * Directly calls: LanceNamespace.namespaceExists(NamespaceExistsRequest)
      */
-    @Override
     public boolean namespaceExists(String... namespaceId) {
+        LOG.debug("Checking if namespace exists: {}", Arrays.toString(namespaceId));
+        
         try {
+            if (namespace == null) {
+                init();
+            }
+            
             NamespaceExistsRequest request = new NamespaceExistsRequest();
             request.setId(Arrays.asList(namespaceId));
             
@@ -154,100 +161,112 @@ public class LanceNamespaceAdapter implements AbstractLanceNamespaceAdapter {
     }
     
     /**
-     * Create namespace.
-     * Directly calls: LanceNamespace.createNamespace(CreateNamespaceRequest)
+     * Create a namespace.
      */
-    @Override
     public void createNamespace(Map<String, String> properties, String... namespaceId) {
+        LOG.info("Creating namespace: {}", Arrays.toString(namespaceId));
+        
         try {
+            if (namespace == null) {
+                init();
+            }
+            
             CreateNamespaceRequest request = new CreateNamespaceRequest();
             request.setId(Arrays.asList(namespaceId));
-            
-            if (properties != null && !properties.isEmpty()) {
+            if (properties != null) {
                 request.setProperties(properties);
             }
             
             namespace.createNamespace(request);
-            
             LOG.info("Namespace created successfully: {}", Arrays.toString(namespaceId));
         } catch (Exception e) {
-            LOG.error("Failed to create namespace", e);
+            LOG.error("Failed to create namespace: {}", Arrays.toString(namespaceId), e);
             throw new RuntimeException("Failed to create namespace", e);
         }
     }
     
     /**
-     * Drop namespace.
-     * Directly calls: LanceNamespace.dropNamespace(DropNamespaceRequest)
+     * Drop a namespace.
      */
-    @Override
     public void dropNamespace(boolean cascade, String... namespaceId) {
+        LOG.info("Dropping namespace: {} (cascade={})", Arrays.toString(namespaceId), cascade);
+        
         try {
+            if (namespace == null) {
+                init();
+            }
+            
             DropNamespaceRequest request = new DropNamespaceRequest();
             request.setId(Arrays.asList(namespaceId));
             request.setCascade(cascade);
             
             namespace.dropNamespace(request);
-            
             LOG.info("Namespace dropped successfully: {}", Arrays.toString(namespaceId));
         } catch (Exception e) {
-            LOG.error("Failed to drop namespace", e);
+            LOG.error("Failed to drop namespace: {}", Arrays.toString(namespaceId), e);
             throw new RuntimeException("Failed to drop namespace", e);
         }
     }
     
     /**
      * Get namespace metadata.
-     * Directly calls: LanceNamespace.describeNamespace(DescribeNamespaceRequest)
      */
-    @Override
     public Map<String, String> getNamespaceMetadata(String... namespaceId) {
+        LOG.debug("Getting namespace metadata: {}", Arrays.toString(namespaceId));
+        
         try {
+            if (namespace == null) {
+                init();
+            }
+            
             DescribeNamespaceRequest request = new DescribeNamespaceRequest();
             request.setId(Arrays.asList(namespaceId));
             
             DescribeNamespaceResponse response = namespace.describeNamespace(request);
-            
-            if (response.getProperties() != null) {
-                return response.getProperties();
-            }
-            return new HashMap<>();
+            return response.getProperties() != null ? response.getProperties() : new HashMap<>();
         } catch (Exception e) {
-            LOG.warn("Failed to get namespace metadata", e);
+            LOG.warn("Failed to get namespace metadata: {}", Arrays.toString(namespaceId), e);
             return new HashMap<>();
         }
     }
     
     /**
-     * List all tables in namespace.
-     * Directly calls: LanceNamespace.listTables(ListTablesRequest)
+     * List tables in a namespace.
      */
-    @Override
     public List<String> listTables(String... namespaceId) {
+        LOG.debug("Listing tables in namespace: {}", Arrays.toString(namespaceId));
+        
         try {
+            if (namespace == null) {
+                init();
+            }
+            
             ListTablesRequest request = new ListTablesRequest();
             request.setId(Arrays.asList(namespaceId));
             
             ListTablesResponse response = namespace.listTables(request);
-            
             if (response.getTables() != null) {
                 Set<String> tableSet = response.getTables();
                 return new ArrayList<>(tableSet);
             }
             return new ArrayList<>();
         } catch (Exception e) {
-            LOG.warn("Failed to list tables", e);
+            LOG.warn("Failed to list tables in namespace: {}", Arrays.toString(namespaceId), e);
             return new ArrayList<>();
         }
     }
     
     /**
      * Check if table exists.
-     * Directly calls: LanceNamespace.tableExists(TableExistsRequest)
      */
-    @Override
     public boolean tableExists(String... tableId) {
+        LOG.debug("Checking if table exists: {}", Arrays.toString(tableId));
+        
         try {
+            if (namespace == null) {
+                init();
+            }
+            
             TableExistsRequest request = new TableExistsRequest();
             request.setId(Arrays.asList(tableId));
             
@@ -260,87 +279,110 @@ public class LanceNamespaceAdapter implements AbstractLanceNamespaceAdapter {
     }
     
     /**
-     * Create empty table.
-     * Directly calls: LanceNamespace.createEmptyTable(CreateEmptyTableRequest)
+     * Create an empty table.
      */
-    @Override
     public void createEmptyTable(String location, Map<String, String> properties, String... tableId) {
+        LOG.info("Creating empty table: {} at {}", Arrays.toString(tableId), location);
+        
         try {
+            if (namespace == null) {
+                init();
+            }
+            
             CreateEmptyTableRequest request = new CreateEmptyTableRequest();
             request.setId(Arrays.asList(tableId));
-            
-            // Set table location information
-            if (location != null) {
-                request.setPath(location);
+            request.setLocation(location);
+            if (properties != null) {
+                request.setProperties(properties);
             }
             
             namespace.createEmptyTable(request);
-            
             LOG.info("Table created successfully: {}", Arrays.toString(tableId));
         } catch (Exception e) {
-            LOG.error("Failed to create table", e);
+            LOG.error("Failed to create table: {}", Arrays.toString(tableId), e);
             throw new RuntimeException("Failed to create table", e);
         }
     }
     
     /**
-     * Drop table.
-     * Directly calls: LanceNamespace.dropTable(DropTableRequest)
+     * Drop a table.
      */
-    @Override
     public void dropTable(String... tableId) {
+        LOG.info("Dropping table: {}", Arrays.toString(tableId));
+        
         try {
+            if (namespace == null) {
+                init();
+            }
+            
             DropTableRequest request = new DropTableRequest();
             request.setId(Arrays.asList(tableId));
             
             namespace.dropTable(request);
-            
             LOG.info("Table dropped successfully: {}", Arrays.toString(tableId));
         } catch (Exception e) {
-            LOG.error("Failed to drop table", e);
+            LOG.error("Failed to drop table: {}", Arrays.toString(tableId), e);
             throw new RuntimeException("Failed to drop table", e);
         }
     }
     
     /**
      * Get table metadata.
-     * Directly calls: LanceNamespace.describeTable(DescribeTableRequest)
      */
-    @Override
     public TableMetadata getTableMetadata(String... tableId) {
+        LOG.debug("Getting table metadata: {}", Arrays.toString(tableId));
+        
         try {
+            if (namespace == null) {
+                init();
+            }
+            
             DescribeTableRequest request = new DescribeTableRequest();
             request.setId(Arrays.asList(tableId));
             
             DescribeTableResponse response = namespace.describeTable(request);
             
-            String location = "/path/to/table";
-            Map<String, String> options = new HashMap<>();
-            
-            // Call API to get table path
-            if (response.getTable_path() != null) {
-                location = response.getTable_path();
-            }
-            
-            // Call API to get properties
-            if (response.getProperties() != null) {
-                options = response.getProperties();
-            }
+            String location = response.getLocation();
+            Map<String, String> options = response.getProperties() != null
+                    ? response.getProperties()
+                    : new HashMap<>();
             
             return new TableMetadata(location, options);
         } catch (Exception e) {
-            LOG.warn("Failed to get table metadata", e);
+            LOG.warn("Failed to get table metadata: {}", Arrays.toString(tableId), e);
             return new TableMetadata("/path/to/table", new HashMap<>());
         }
     }
     
-
+    /**
+     * Get the underlying Lance Namespace instance.
+     */
+    public LanceNamespace getNamespace() {
+        if (namespace == null) {
+            init();
+        }
+        return namespace;
+    }
     
+    /**
+     * Get the Buffer Allocator.
+     */
+    public BufferAllocator getAllocator() {
+        return allocator;
+    }
+    
+    /**
+     * Close the adapter and release resources.
+     */
     @Override
-    public void close() throws Exception {
+    public void close() {
         try {
-            if (namespace != null) {
-                namespace.close();
+            if (namespace instanceof AutoCloseable) {
+                try {
+                    ((AutoCloseable) namespace).close();
+                } catch (Exception e) {
+                    LOG.debug("Error invoking close() on namespace", e);
+                }
             }
         } catch (Exception e) {
             LOG.warn("Error during namespace cleanup", e);
@@ -348,6 +390,27 @@ public class LanceNamespaceAdapter implements AbstractLanceNamespaceAdapter {
         
         if (allocator != null) {
             allocator.close();
+        }
+    }
+    
+    /**
+     * Table metadata holder.
+     */
+    public static class TableMetadata {
+        private final String location;
+        private final Map<String, String> storageOptions;
+        
+        public TableMetadata(String location, Map<String, String> storageOptions) {
+            this.location = location;
+            this.storageOptions = storageOptions;
+        }
+        
+        public String getLocation() {
+            return location;
+        }
+        
+        public Map<String, String> getStorageOptions() {
+            return storageOptions;
         }
     }
 }

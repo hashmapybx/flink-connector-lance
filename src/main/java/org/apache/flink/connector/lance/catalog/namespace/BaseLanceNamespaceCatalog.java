@@ -20,65 +20,488 @@ package org.apache.flink.connector.lance.catalog.namespace;
 
 import org.apache.flink.table.catalog.AbstractCatalog;
 import org.apache.flink.table.catalog.CatalogBaseTable;
+import org.apache.flink.table.catalog.CatalogDatabase;
 import org.apache.flink.table.catalog.CatalogTable;
+import org.apache.flink.table.catalog.CatalogPartition;
+import org.apache.flink.table.catalog.CatalogFunction;
 import org.apache.flink.table.catalog.ObjectPath;
+import org.apache.flink.table.catalog.CatalogPartitionSpec;
+import org.apache.flink.table.catalog.stats.CatalogColumnStatistics;
+import org.apache.flink.table.catalog.stats.CatalogTableStatistics;
 import org.apache.flink.table.catalog.exceptions.CatalogException;
+import org.apache.flink.table.catalog.exceptions.DatabaseAlreadyExistException;
+import org.apache.flink.table.catalog.exceptions.DatabaseNotExistException;
+import org.apache.flink.table.catalog.exceptions.TableAlreadyExistException;
+import org.apache.flink.table.catalog.exceptions.TableNotExistException;
+import org.apache.flink.table.catalog.exceptions.PartitionAlreadyExistsException;
+import org.apache.flink.table.catalog.exceptions.PartitionNotExistException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
 
 /**
- * Base class for Lance Catalog implementation integrated with Lance Namespace.
- * 
- * This class provides the foundation for catalog operations using a namespace adapter,
- * supporting multi-level namespace hierarchies and flexible backend implementations.
+ * Base Lance Catalog implementation integrated with Lance Namespace.
  */
 public abstract class BaseLanceNamespaceCatalog extends AbstractCatalog {
     
-    protected AbstractLanceNamespaceAdapter adapter;
-    protected LanceNamespaceConfig config;
+    private static final Logger LOG = LoggerFactory.getLogger(BaseLanceNamespaceCatalog.class);
     
-    public BaseLanceNamespaceCatalog(String catalogName, 
-                                    AbstractLanceNamespaceAdapter adapter,
-                                    LanceNamespaceConfig config) {
+    protected LanceNamespaceAdapter namespaceAdapter;
+    protected LanceNamespaceConfig config;
+    protected Optional<String> extraLevel;
+    protected Optional<String[]> parentPrefix;
+    
+    public BaseLanceNamespaceCatalog(String catalogName, LanceNamespaceAdapter adapter, LanceNamespaceConfig config) {
         super(catalogName, "default");
-        this.adapter = adapter;
-        this.config = config;
+        
+        this.namespaceAdapter = Objects.requireNonNull(adapter, "Namespace adapter cannot be null");
+        this.config = Objects.requireNonNull(config, "Configuration cannot be null");
+        
+        LOG.info("Initializing BaseLanceNamespaceCatalog: {}", catalogName);
+        
+        // Configure extra level
+        if (config.getExtraLevel().isPresent()) {
+            this.extraLevel = config.getExtraLevel();
+        } else if (config.isDirectoryNamespace()) {
+            this.extraLevel = Optional.of("default");
+        } else {
+            this.extraLevel = Optional.empty();
+        }
+        
+        // Configure parent prefix
+        this.parentPrefix = config.getParentArray();
+        
+        LOG.info("Catalog configuration - impl: {}, extraLevel: {}, parentPrefix: {}",
+                config.getImpl(), extraLevel, parentPrefix);
     }
     
-    /**
-     * Abstract method to be implemented by subclasses to create CatalogTable from metadata.
-     */
-    protected abstract CatalogTable createCatalogTable(
-            String databaseName,
-            String tableName,
-            AbstractLanceNamespaceAdapter.TableMetadata metadata) throws CatalogException;
+    // ========== Database Operations ==========
     
-    /**
-     * Transform database name to namespace path array.
-     */
-    protected String[] transformDatabaseNameToNamespace(String databaseName) {
-        java.util.Optional<String[]> parentPrefix = config.getParentArray();
-        java.util.Optional<String> extraLevel = config.getExtraLevel();
+    @Override
+    public void createDatabase(String name, CatalogDatabase database, boolean ignoreIfExists)
+            throws DatabaseAlreadyExistException, CatalogException {
         
-        if (parentPrefix.isPresent()) {
-            String[] parent = parentPrefix.get();
-            String[] result = new String[parent.length + 1];
-            System.arraycopy(parent, 0, result, 0, parent.length);
-            result[parent.length] = databaseName;
-            return result;
-        } else if (extraLevel.isPresent()) {
-            return new String[]{extraLevel.get(), databaseName};
-        } else {
-            return new String[]{databaseName};
+        LOG.info("Creating database: {} (ignoreIfExists={})", name, ignoreIfExists);
+        
+        try {
+            if (databaseExists(name)) {
+                if (ignoreIfExists) {
+                    LOG.info("Database already exists, skipping creation: {}", name);
+                    return;
+                } else {
+                    throw new DatabaseAlreadyExistException(getName(), name);
+                }
+            }
+            
+            String[] namespacePath = transformDatabaseNameToNamespace(name);
+            Map<String, String> properties = database.getProperties();
+            namespaceAdapter.createNamespace(properties, namespacePath);
+            
+            LOG.info("Database created successfully: {}", name);
+        } catch (DatabaseAlreadyExistException e) {
+            throw e;
+        } catch (Exception e) {
+            LOG.error("Failed to create database: {}", name, e);
+            throw new CatalogException("Failed to create database: " + name, e);
         }
     }
     
-    /**
-     * Transform table name to full table ID (namespace path + table name).
-     */
+    @Override
+    public void dropDatabase(String name, boolean ignoreIfNotExists, boolean cascade)
+            throws DatabaseNotExistException, CatalogException {
+        
+        LOG.info("Dropping database: {} (cascade={})", name, cascade);
+        
+        try {
+            if (!databaseExists(name)) {
+                if (ignoreIfNotExists) {
+                    LOG.info("Database does not exist, skipping drop: {}", name);
+                    return;
+                } else {
+                    throw new DatabaseNotExistException(getName(), name);
+                }
+            }
+            
+            String[] namespacePath = transformDatabaseNameToNamespace(name);
+            namespaceAdapter.dropNamespace(cascade, namespacePath);
+            
+            LOG.info("Database dropped successfully: {}", name);
+        } catch (DatabaseNotExistException e) {
+            throw e;
+        } catch (Exception e) {
+            LOG.error("Failed to drop database: {}", name, e);
+            throw new CatalogException("Failed to drop database: " + name, e);
+        }
+    }
+    
+    @Override
+    public List<String> listDatabases() throws CatalogException {
+        LOG.debug("Listing databases");
+        
+        try {
+            return namespaceAdapter.listNamespaces();
+        } catch (Exception e) {
+            LOG.error("Failed to list databases", e);
+            throw new CatalogException("Failed to list databases", e);
+        }
+    }
+    
+    @Override
+    public CatalogDatabase getDatabase(String name)
+            throws DatabaseNotExistException, CatalogException {
+        
+        LOG.debug("Getting database: {}", name);
+        
+        try {
+            if (!databaseExists(name)) {
+                throw new DatabaseNotExistException(getName(), name);
+            }
+            
+            String[] namespacePath = transformDatabaseNameToNamespace(name);
+            Map<String, String> metadata = namespaceAdapter.getNamespaceMetadata(namespacePath);
+            
+            return new org.apache.flink.table.catalog.CatalogDatabaseImpl(metadata, "");
+        } catch (DatabaseNotExistException e) {
+            throw e;
+        } catch (Exception e) {
+            LOG.error("Failed to get database: {}", name, e);
+            throw new CatalogException("Failed to get database: " + name, e);
+        }
+    }
+    
+    @Override
+    public boolean databaseExists(String name) {
+        LOG.debug("Checking if database exists: {}", name);
+        
+        try {
+            String[] namespacePath = transformDatabaseNameToNamespace(name);
+            return namespaceAdapter.namespaceExists(namespacePath);
+        } catch (Exception e) {
+            LOG.debug("Error checking database existence: {}", name, e);
+            return false;
+        }
+    }
+    
+    // ========== Table Operations ==========
+    
+    @Override
+    public void createTable(ObjectPath tablePath, CatalogBaseTable table, boolean ignoreIfExists)
+            throws TableAlreadyExistException, DatabaseNotExistException, CatalogException {
+        
+        LOG.info("Creating table: {} (ignoreIfExists={})", tablePath, ignoreIfExists);
+        
+        try {
+            String dbName = tablePath.getDatabaseName();
+            String tblName = tablePath.getObjectName();
+            
+            if (!databaseExists(dbName)) {
+                throw new DatabaseNotExistException(getName(), dbName);
+            }
+            
+            if (tableExists(tablePath)) {
+                if (ignoreIfExists) {
+                    LOG.info("Table already exists, skipping creation: {}", tablePath);
+                    return;
+                } else {
+                    throw new TableAlreadyExistException(getName(), tablePath);
+                }
+            }
+            
+            String[] tableId = transformTableNameToId(dbName, tblName);
+            Map<String, String> properties = table.getOptions();
+            namespaceAdapter.createEmptyTable(null, properties, tableId);
+            
+            LOG.info("Table created successfully: {}", tablePath);
+        } catch (TableAlreadyExistException | DatabaseNotExistException e) {
+            throw e;
+        } catch (Exception e) {
+            LOG.error("Failed to create table: {}", tablePath, e);
+            throw new CatalogException("Failed to create table: " + tablePath, e);
+        }
+    }
+    
+    @Override
+    public void dropTable(ObjectPath tablePath, boolean ignoreIfNotExists)
+            throws TableNotExistException, CatalogException {
+        
+        LOG.info("Dropping table: {}", tablePath);
+        
+        try {
+            if (!tableExists(tablePath)) {
+                if (ignoreIfNotExists) {
+                    LOG.info("Table does not exist, skipping drop: {}", tablePath);
+                    return;
+                } else {
+                    throw new TableNotExistException(getName(), tablePath);
+                }
+            }
+            
+            String[] tableId = transformTableNameToId(tablePath.getDatabaseName(), tablePath.getObjectName());
+            namespaceAdapter.dropTable(tableId);
+            
+            LOG.info("Table dropped successfully: {}", tablePath);
+        } catch (TableNotExistException e) {
+            throw e;
+        } catch (Exception e) {
+            LOG.error("Failed to drop table: {}", tablePath, e);
+            throw new CatalogException("Failed to drop table: " + tablePath, e);
+        }
+    }
+    
+    @Override
+    public List<String> listTables(String databaseName)
+            throws DatabaseNotExistException, CatalogException {
+        
+        LOG.debug("Listing tables in database: {}", databaseName);
+        
+        try {
+            if (!databaseExists(databaseName)) {
+                throw new DatabaseNotExistException(getName(), databaseName);
+            }
+            
+            String[] namespacePath = transformDatabaseNameToNamespace(databaseName);
+            return namespaceAdapter.listTables(namespacePath);
+        } catch (DatabaseNotExistException e) {
+            throw e;
+        } catch (Exception e) {
+            LOG.error("Failed to list tables in database: {}", databaseName, e);
+            throw new CatalogException("Failed to list tables in database: " + databaseName, e);
+        }
+    }
+    
+    @Override
+    public CatalogTable getTable(ObjectPath tablePath)
+            throws TableNotExistException, CatalogException {
+        
+        LOG.debug("Getting table: {}", tablePath);
+        
+        try {
+            if (!tableExists(tablePath)) {
+                throw new TableNotExistException(getName(), tablePath);
+            }
+            
+            String[] tableId = transformTableNameToId(tablePath.getDatabaseName(), tablePath.getObjectName());
+            LanceNamespaceAdapter.TableMetadata metadata = namespaceAdapter.getTableMetadata(tableId);
+            
+            return createCatalogTable(tablePath.getDatabaseName(), tablePath.getObjectName(), metadata);
+        } catch (TableNotExistException e) {
+            throw e;
+        } catch (Exception e) {
+            LOG.error("Failed to get table: {}", tablePath, e);
+            throw new CatalogException("Failed to get table: " + tablePath, e);
+        }
+    }
+    
+    @Override
+    public boolean tableExists(ObjectPath tablePath) {
+        LOG.debug("Checking if table exists: {}", tablePath);
+        
+        try {
+            String[] tableId = transformTableNameToId(tablePath.getDatabaseName(), tablePath.getObjectName());
+            return namespaceAdapter.tableExists(tableId);
+        } catch (Exception e) {
+            LOG.debug("Error checking table existence: {}", tablePath, e);
+            return false;
+        }
+    }
+    
+    // ========== Abstract method to be implemented by subclasses ==========
+    
+    protected abstract CatalogTable createCatalogTable(
+            String databaseName,
+            String tableName,
+            LanceNamespaceAdapter.TableMetadata metadata) throws CatalogException;
+    
+    // ========== Helper methods ==========
+    
+    protected String[] transformDatabaseNameToNamespace(String databaseName) {
+        String[] baseNamespace = new String[] {databaseName};
+        
+        if (parentPrefix.isPresent()) {
+            String[] parent = parentPrefix.get();
+            String[] result = new String[parent.length + baseNamespace.length];
+            System.arraycopy(parent, 0, result, 0, parent.length);
+            System.arraycopy(baseNamespace, 0, result, parent.length, baseNamespace.length);
+            return result;
+        } else if (extraLevel.isPresent()) {
+            String[] result = new String[baseNamespace.length + 1];
+            result[0] = extraLevel.get();
+            System.arraycopy(baseNamespace, 0, result, 1, baseNamespace.length);
+            return result;
+        } else {
+            return baseNamespace;
+        }
+    }
+    
     protected String[] transformTableNameToId(String databaseName, String tableName) {
         String[] dbPath = transformDatabaseNameToNamespace(databaseName);
         String[] result = new String[dbPath.length + 1];
         System.arraycopy(dbPath, 0, result, 0, dbPath.length);
         result[dbPath.length] = tableName;
         return result;
+    }
+    
+    // ========== Not implemented - Partition operations not supported ==========
+    
+    @Override
+    public void createPartition(ObjectPath tablePath, CatalogPartitionSpec partitionSpec,
+            CatalogPartition partition, boolean ignoreIfExists)
+            throws TableNotExistException, PartitionAlreadyExistsException, CatalogException {
+        throw new CatalogException("Partition operations are not supported");
+    }
+    
+    @Override
+    public void dropPartition(ObjectPath tablePath, CatalogPartitionSpec partitionSpec,
+            boolean ignoreIfNotExists)
+            throws PartitionNotExistException, CatalogException {
+        throw new CatalogException("Partition operations are not supported");
+    }
+    
+    @Override
+    public List<CatalogPartitionSpec> listPartitions(ObjectPath tablePath)
+            throws TableNotExistException, CatalogException {
+        throw new CatalogException("Partition operations are not supported");
+    }
+    
+    @Override
+    public CatalogPartition getPartition(ObjectPath tablePath, CatalogPartitionSpec partitionSpec)
+            throws PartitionNotExistException, CatalogException {
+        throw new CatalogException("Partition operations are not supported");
+    }
+    
+    @Override
+    public boolean partitionExists(ObjectPath tablePath, CatalogPartitionSpec partitionSpec)
+            throws CatalogException {
+        throw new CatalogException("Partition operations are not supported");
+    }
+    
+    @Override
+    public void alterPartition(ObjectPath tablePath, CatalogPartitionSpec partitionSpec,
+            CatalogPartition newPartition, boolean ignoreIfNotExists)
+            throws PartitionNotExistException, CatalogException {
+        throw new CatalogException("Partition operations are not supported");
+    }
+    
+    @Override
+    public List<CatalogPartitionSpec> listPartitionsByFilter(ObjectPath tablePath, List<org.apache.flink.table.expressions.Expression> filters)
+            throws CatalogException {
+        throw new CatalogException("Partition operations are not supported");
+    }
+    
+    @Override
+    public void alterTableStatistics(ObjectPath tablePath, CatalogTableStatistics tableStatistics,
+            boolean ignoreIfNotExists)
+            throws TableNotExistException, CatalogException {
+        LOG.debug("Alter table statistics not supported: {}", tablePath);
+    }
+    
+    @Override
+    public void alterPartitionStatistics(ObjectPath tablePath, CatalogPartitionSpec partitionSpec,
+            CatalogTableStatistics partitionStatistics, boolean ignoreIfNotExists)
+            throws PartitionNotExistException, CatalogException {
+        throw new CatalogException("Partition operations are not supported");
+    }
+    
+    @Override
+    public void alterTableColumnStatistics(ObjectPath tablePath, CatalogColumnStatistics columnStatistics,
+            boolean ignoreIfNotExists)
+            throws TableNotExistException, CatalogException {
+        LOG.debug("Alter table column statistics not supported: {}", tablePath);
+    }
+    
+    @Override
+    public void alterPartitionColumnStatistics(ObjectPath tablePath, CatalogPartitionSpec partitionSpec,
+            CatalogColumnStatistics columnStatistics, boolean ignoreIfNotExists)
+            throws PartitionNotExistException, CatalogException {
+        throw new CatalogException("Partition operations are not supported");
+    }
+    
+    @Override
+    public CatalogTableStatistics getTableStatistics(ObjectPath tablePath)
+            throws TableNotExistException, CatalogException {
+        LOG.debug("Get table statistics not supported: {}", tablePath);
+        return null;
+    }
+    
+    @Override
+    public CatalogColumnStatistics getTableColumnStatistics(ObjectPath tablePath)
+            throws TableNotExistException, CatalogException {
+        LOG.debug("Get table column statistics not supported: {}", tablePath);
+        return null;
+    }
+    
+    @Override
+    public CatalogTableStatistics getPartitionStatistics(ObjectPath tablePath, CatalogPartitionSpec partitionSpec)
+            throws PartitionNotExistException, CatalogException {
+        throw new CatalogException("Partition operations are not supported");
+    }
+    
+    @Override
+    public CatalogColumnStatistics getPartitionColumnStatistics(ObjectPath tablePath, CatalogPartitionSpec partitionSpec)
+            throws PartitionNotExistException, CatalogException {
+        throw new CatalogException("Partition operations are not supported");
+    }
+    
+    @Override
+    public void alterTable(ObjectPath tablePath, CatalogBaseTable newTable, boolean ignoreIfNotExists)
+            throws TableNotExistException, CatalogException {
+        LOG.debug("Alter table not supported: {}", tablePath);
+    }
+    
+    @Override
+    public void renameTable(ObjectPath tablePath, String newTableName, boolean ignoreIfNotExists)
+            throws CatalogException {
+        LOG.debug("Rename table not supported: {} -> {}", tablePath, newTableName);
+    }
+    
+    @Override
+    public void alterDatabase(String name, CatalogDatabase newDatabase, boolean ignoreIfNotExists)
+            throws DatabaseNotExistException, CatalogException {
+        LOG.debug("Alter database not supported: {}", name);
+    }
+    
+    // Note: renameDatabase is not part of the standard Flink Catalog interface
+    // If needed, it should be implemented by subclasses
+    
+    @Override
+    public void dropFunction(ObjectPath functionPath, boolean ignoreIfNotExists)
+            throws CatalogException {
+        throw new CatalogException("Function operations are not supported");
+    }
+    
+    @Override
+    public void createFunction(ObjectPath functionPath, CatalogFunction function, boolean ignoreIfExists)
+            throws CatalogException {
+        throw new CatalogException("Function operations are not supported");
+    }
+    
+    @Override
+    public void alterFunction(ObjectPath functionPath, CatalogFunction newFunction, boolean ignoreIfNotExists)
+            throws CatalogException {
+        throw new CatalogException("Function operations are not supported");
+    }
+    
+    @Override
+    public List<String> listFunctions(String databaseName)
+            throws CatalogException {
+        throw new CatalogException("Function operations are not supported");
+    }
+    
+    @Override
+    public CatalogFunction getFunction(ObjectPath functionPath)
+            throws CatalogException {
+        throw new CatalogException("Function operations are not supported");
+    }
+    
+    @Override
+    public boolean functionExists(ObjectPath functionPath)
+            throws CatalogException {
+        throw new CatalogException("Function operations are not supported");
     }
 }
