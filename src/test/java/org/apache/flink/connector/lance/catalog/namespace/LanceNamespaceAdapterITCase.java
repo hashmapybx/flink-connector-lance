@@ -21,7 +21,9 @@ package org.apache.flink.connector.lance.catalog.namespace;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Path;
@@ -35,14 +37,22 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 /**
  * Lance Namespace Adapter Integration Test.
  * 
- * This test class covers all CRUD operations of LanceNamespaceAdapter for Table API,
- * including complete lifecycle management of table creation, query, update and deletion.
+ * <p>This test class uses the real Lance Namespace backends (DirectoryNamespace and RestNamespace)
+ * as supported by lance-core. No mocking is used - tests run against actual namespace implementations.
  * 
- * Test scope:
- * - Namespace management: create, list, check, delete
- * - Table management: create, query, check, delete
- * - Metadata operations: get namespace and table metadata
- * - Error handling: duplicate creation, non-existing resources and other exception scenarios
+ * <p>Test backends:
+ * <ul>
+ *   <li><b>DirectoryNamespace</b>: Default backend for local storage, used in all tests</li>
+ *   <li><b>RestNamespace</b>: REST API backend, enabled when LANCE_REST_URI environment variable is set</li>
+ * </ul>
+ * 
+ * <p>Test scope:
+ * <ul>
+ *   <li>Namespace management: create, list, check, delete</li>
+ *   <li>Table management: create, query, check, delete</li>
+ *   <li>Metadata operations: get namespace and table metadata</li>
+ *   <li>Error handling: duplicate creation, non-existing resources and other exception scenarios</li>
+ * </ul>
  */
 @DisplayName("Lance Namespace Adapter Integration Test")
 class LanceNamespaceAdapterITCase {
@@ -351,7 +361,7 @@ class LanceNamespaceAdapterITCase {
         adapter.createEmptyTable(tableLocation, tableProperties, namespaceName, tableName);
         
         // Execute
-        AbstractLanceNamespaceAdapter.TableMetadata metadata = 
+        LanceNamespaceAdapter.TableMetadata metadata = 
             adapter.getTableMetadata(namespaceName, tableName);
         
         // Verify
@@ -442,9 +452,9 @@ class LanceNamespaceAdapterITCase {
         assertThat(tables).contains(tableName);
         
         // 4. Read - get table metadata
-        AbstractLanceNamespaceAdapter.TableMetadata metadata = 
+        LanceNamespaceAdapter.TableMetadata tableMetadata = 
             adapter.getTableMetadata(namespaceName, tableName);
-        assertThat(metadata.getLocation()).contains(tableName);
+        assertThat(tableMetadata.getLocation()).contains(tableName);
         
         // 5. Delete - drop table
         adapter.dropTable(namespaceName, tableName);
@@ -611,6 +621,105 @@ class LanceNamespaceAdapterITCase {
             assertThat(newAdapter.namespaceExists(namespaceName)).isTrue();
         } finally {
             newAdapter.close();
+        }
+    }
+    
+    // ==================== REST Namespace Tests ====================
+    
+    /**
+     * REST Namespace backend tests.
+     * 
+     * <p>These tests are enabled when the LANCE_REST_URI environment variable is set.
+     * They verify that the adapter works correctly with REST-based namespace implementations.
+     * 
+     * <p>To run these tests, set the environment variable:
+     * <pre>
+     * export LANCE_REST_URI=http://localhost:8080
+     * </pre>
+     */
+    @Nested
+    @DisplayName("REST Namespace Backend Tests")
+    @EnabledIfEnvironmentVariable(named = "LANCE_REST_URI", matches = ".+")
+    class RestNamespaceTests {
+        
+        private LanceNamespaceAdapter restAdapter;
+        
+        @BeforeEach
+        void setUp() {
+            String restUri = System.getenv("LANCE_REST_URI");
+            
+            Map<String, String> properties = new HashMap<>();
+            properties.put(LanceNamespaceConfig.KEY_IMPL, "rest");
+            properties.put(LanceNamespaceConfig.KEY_URI, restUri);
+            
+            restAdapter = LanceNamespaceAdapter.create(properties);
+            restAdapter.init();
+        }
+        
+        @AfterEach
+        void tearDown() throws Exception {
+            if (restAdapter != null) {
+                restAdapter.close();
+            }
+        }
+        
+        @Test
+        @DisplayName("Test REST namespace creation and listing")
+        void testRestNamespaceOperations() {
+            String testNamespace = "rest_test_db_" + System.currentTimeMillis();
+            
+            try {
+                // Create namespace
+                restAdapter.createNamespace(new HashMap<>(), testNamespace);
+                assertThat(restAdapter.namespaceExists(testNamespace)).isTrue();
+                
+                // List namespaces
+                List<String> namespaces = restAdapter.listNamespaces();
+                assertThat(namespaces).contains(testNamespace);
+            } finally {
+                // Cleanup
+                try {
+                    restAdapter.dropNamespace(true, testNamespace);
+                } catch (Exception ignored) {
+                    // Ignore cleanup errors
+                }
+            }
+        }
+        
+        @Test
+        @DisplayName("Test REST table operations")
+        void testRestTableOperations() {
+            String testNamespace = "rest_table_db_" + System.currentTimeMillis();
+            String testTable = "rest_test_table";
+            
+            try {
+                // Create namespace first
+                restAdapter.createNamespace(new HashMap<>(), testNamespace);
+                
+                // Create table
+                restAdapter.createEmptyTable(null, new HashMap<>(), testNamespace, testTable);
+                assertThat(restAdapter.tableExists(testNamespace, testTable)).isTrue();
+                
+                // List tables
+                List<String> tables = restAdapter.listTables(testNamespace);
+                assertThat(tables).contains(testTable);
+                
+                // Get table metadata
+                LanceNamespaceAdapter.TableMetadata metadata = 
+                    restAdapter.getTableMetadata(testNamespace, testTable);
+                assertThat(metadata).isNotNull();
+                
+                // Drop table
+                restAdapter.dropTable(testNamespace, testTable);
+                assertThat(restAdapter.tableExists(testNamespace, testTable)).isFalse();
+            } finally {
+                // Cleanup
+                try {
+                    restAdapter.dropNamespace(true, testNamespace);
+                } catch (Exception ignored) {
+                    // Ignore cleanup errors
+                }
+            }
         }
     }
 }
