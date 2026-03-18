@@ -30,6 +30,21 @@
     </properties>
 
     <dependencies>
+
+        <dependency>
+            <groupId>org.lance</groupId>
+            <artifactId>lance-namespace-core</artifactId>
+            <version>0.5.4</version>
+<!--            <scope>compile</scope>-->
+        </dependency>
+
+        <dependency>
+            <groupId>org.lance</groupId>
+            <artifactId>lance-namespace-apache-client</artifactId>
+            <version>0.5.4</version>
+        </dependency>
+
+
         <!-- ==================== Flink 核心依赖 ==================== -->
         <!-- Flink Streaming Java -->
         <dependency>

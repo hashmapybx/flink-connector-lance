@@ -35,27 +35,47 @@ import org.apache.flink.table.catalog.exceptions.TableAlreadyExistException;
 import org.apache.flink.table.catalog.exceptions.TableNotExistException;
 import org.apache.flink.table.catalog.exceptions.PartitionAlreadyExistsException;
 import org.apache.flink.table.catalog.exceptions.PartitionNotExistException;
+import org.lance.namespace.LanceNamespace;
+import org.lance.namespace.model.CreateNamespaceRequest;
+import org.lance.namespace.model.CreateEmptyTableRequest;
+import org.lance.namespace.model.DescribeNamespaceRequest;
+import org.lance.namespace.model.DescribeNamespaceResponse;
+import org.lance.namespace.model.DescribeTableRequest;
+import org.lance.namespace.model.DescribeTableResponse;
+import org.lance.namespace.model.DropNamespaceRequest;
+import org.lance.namespace.model.DropTableRequest;
+import org.lance.namespace.model.ListNamespacesRequest;
+import org.lance.namespace.model.ListNamespacesResponse;
+import org.lance.namespace.model.ListTablesRequest;
+import org.lance.namespace.model.ListTablesResponse;
+import org.lance.namespace.model.NamespaceExistsRequest;
+import org.lance.namespace.model.TableExistsRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 
 /**
- * Base Lance Catalog implementation integrated with Lance Namespace.
+ * Base Flink Catalog built on top of Lance Namespace.
+ *
+ * <p>Delegates namespace/table operations directly to the {@link LanceNamespace} API,
+ * while using {@link LanceNamespaceAdapter} to manage connection lifecycle.</p>
  */
 public abstract class BaseLanceNamespaceCatalog extends AbstractCatalog {
     
     private static final Logger LOG = LoggerFactory.getLogger(BaseLanceNamespaceCatalog.class);
     
-    protected LanceNamespaceAdapter namespaceAdapter;
-    protected LanceNamespaceConfig config;
-    protected Optional<String> extraLevel;
-    protected Optional<String[]> parentPrefix;
+    protected final LanceNamespaceAdapter namespaceAdapter;
+    protected final LanceNamespaceConfig config;
+    protected final Optional<String> extraLevel;
+    protected final Optional<String[]> parentPrefix;
     
     public BaseLanceNamespaceCatalog(String catalogName, LanceNamespaceAdapter adapter, LanceNamespaceConfig config) {
         super(catalogName, "default");
@@ -81,6 +101,13 @@ public abstract class BaseLanceNamespaceCatalog extends AbstractCatalog {
                 config.getImpl(), extraLevel, parentPrefix);
     }
     
+    /**
+     * Returns the underlying LanceNamespace instance.
+     */
+    protected LanceNamespace namespace() {
+        return namespaceAdapter.getNamespace();
+    }
+    
     // ========== Database Operations ==========
     
     @Override
@@ -100,8 +127,13 @@ public abstract class BaseLanceNamespaceCatalog extends AbstractCatalog {
             }
             
             String[] namespacePath = transformDatabaseNameToNamespace(name);
+            CreateNamespaceRequest request = new CreateNamespaceRequest();
+            request.setId(Arrays.asList(namespacePath));
             Map<String, String> properties = database.getProperties();
-            namespaceAdapter.createNamespace(properties, namespacePath);
+            if (properties != null) {
+                request.setProperties(properties);
+            }
+            namespace().createNamespace(request);
             
             LOG.info("Database created successfully: {}", name);
         } catch (DatabaseAlreadyExistException e) {
@@ -129,7 +161,10 @@ public abstract class BaseLanceNamespaceCatalog extends AbstractCatalog {
             }
             
             String[] namespacePath = transformDatabaseNameToNamespace(name);
-            namespaceAdapter.dropNamespace(cascade, namespacePath);
+            DropNamespaceRequest request = new DropNamespaceRequest();
+            request.setId(Arrays.asList(namespacePath));
+            request.setBehavior(cascade ? "CASCADE" : "RESTRICT");
+            namespace().dropNamespace(request);
             
             LOG.info("Database dropped successfully: {}", name);
         } catch (DatabaseNotExistException e) {
@@ -145,7 +180,13 @@ public abstract class BaseLanceNamespaceCatalog extends AbstractCatalog {
         LOG.debug("Listing databases");
         
         try {
-            return namespaceAdapter.listNamespaces();
+            ListNamespacesRequest request = new ListNamespacesRequest();
+            ListNamespacesResponse response = namespace().listNamespaces(request);
+            if (response.getNamespaces() != null) {
+                Set<String> namespaceSet = response.getNamespaces();
+                return new ArrayList<>(namespaceSet);
+            }
+            return new ArrayList<>();
         } catch (Exception e) {
             LOG.error("Failed to list databases", e);
             throw new CatalogException("Failed to list databases", e);
@@ -164,7 +205,11 @@ public abstract class BaseLanceNamespaceCatalog extends AbstractCatalog {
             }
             
             String[] namespacePath = transformDatabaseNameToNamespace(name);
-            Map<String, String> metadata = namespaceAdapter.getNamespaceMetadata(namespacePath);
+            DescribeNamespaceRequest request = new DescribeNamespaceRequest();
+            request.setId(Arrays.asList(namespacePath));
+            DescribeNamespaceResponse response = namespace().describeNamespace(request);
+            Map<String, String> metadata = response.getProperties() != null
+                    ? response.getProperties() : new HashMap<>();
             
             return new org.apache.flink.table.catalog.CatalogDatabaseImpl(metadata, "");
         } catch (DatabaseNotExistException e) {
@@ -181,9 +226,12 @@ public abstract class BaseLanceNamespaceCatalog extends AbstractCatalog {
         
         try {
             String[] namespacePath = transformDatabaseNameToNamespace(name);
-            return namespaceAdapter.namespaceExists(namespacePath);
+            NamespaceExistsRequest request = new NamespaceExistsRequest();
+            request.setId(Arrays.asList(namespacePath));
+            namespace().namespaceExists(request);
+            return true;
         } catch (Exception e) {
-            LOG.debug("Error checking database existence: {}", name, e);
+            LOG.debug("Database does not exist: {}", name);
             return false;
         }
     }
@@ -214,8 +262,13 @@ public abstract class BaseLanceNamespaceCatalog extends AbstractCatalog {
             }
             
             String[] tableId = transformTableNameToId(dbName, tblName);
+            CreateEmptyTableRequest request = new CreateEmptyTableRequest();
+            request.setId(Arrays.asList(tableId));
             Map<String, String> properties = table.getOptions();
-            namespaceAdapter.createEmptyTable(null, properties, tableId);
+            if (properties != null) {
+                request.setProperties(properties);
+            }
+            namespace().createEmptyTable(request);
             
             LOG.info("Table created successfully: {}", tablePath);
         } catch (TableAlreadyExistException | DatabaseNotExistException e) {
@@ -243,7 +296,9 @@ public abstract class BaseLanceNamespaceCatalog extends AbstractCatalog {
             }
             
             String[] tableId = transformTableNameToId(tablePath.getDatabaseName(), tablePath.getObjectName());
-            namespaceAdapter.dropTable(tableId);
+            DropTableRequest request = new DropTableRequest();
+            request.setId(Arrays.asList(tableId));
+            namespace().dropTable(request);
             
             LOG.info("Table dropped successfully: {}", tablePath);
         } catch (TableNotExistException e) {
@@ -266,7 +321,14 @@ public abstract class BaseLanceNamespaceCatalog extends AbstractCatalog {
             }
             
             String[] namespacePath = transformDatabaseNameToNamespace(databaseName);
-            return namespaceAdapter.listTables(namespacePath);
+            ListTablesRequest request = new ListTablesRequest();
+            request.setId(Arrays.asList(namespacePath));
+            ListTablesResponse response = namespace().listTables(request);
+            if (response.getTables() != null) {
+                Set<String> tableSet = response.getTables();
+                return new ArrayList<>(tableSet);
+            }
+            return new ArrayList<>();
         } catch (DatabaseNotExistException e) {
             throw e;
         } catch (Exception e) {
@@ -287,7 +349,14 @@ public abstract class BaseLanceNamespaceCatalog extends AbstractCatalog {
             }
             
             String[] tableId = transformTableNameToId(tablePath.getDatabaseName(), tablePath.getObjectName());
-            LanceNamespaceAdapter.TableMetadata metadata = namespaceAdapter.getTableMetadata(tableId);
+            DescribeTableRequest request = new DescribeTableRequest();
+            request.setId(Arrays.asList(tableId));
+            DescribeTableResponse response = namespace().describeTable(request);
+
+            String location = response.getLocation();
+            Map<String, String> options = response.getProperties() != null
+                    ? response.getProperties() : new HashMap<>();
+            LanceNamespaceAdapter.TableMetadata metadata = new LanceNamespaceAdapter.TableMetadata(location, options);
             
             return createCatalogTable(tablePath.getDatabaseName(), tablePath.getObjectName(), metadata);
         } catch (TableNotExistException e) {
@@ -304,9 +373,12 @@ public abstract class BaseLanceNamespaceCatalog extends AbstractCatalog {
         
         try {
             String[] tableId = transformTableNameToId(tablePath.getDatabaseName(), tablePath.getObjectName());
-            return namespaceAdapter.tableExists(tableId);
+            TableExistsRequest request = new TableExistsRequest();
+            request.setId(Arrays.asList(tableId));
+            namespace().tableExists(request);
+            return true;
         } catch (Exception e) {
-            LOG.debug("Error checking table existence: {}", tablePath, e);
+            LOG.debug("Table does not exist: {}", tablePath);
             return false;
         }
     }
@@ -465,9 +537,6 @@ public abstract class BaseLanceNamespaceCatalog extends AbstractCatalog {
             throws DatabaseNotExistException, CatalogException {
         LOG.debug("Alter database not supported: {}", name);
     }
-    
-    // Note: renameDatabase is not part of the standard Flink Catalog interface
-    // If needed, it should be implemented by subclasses
     
     @Override
     public void dropFunction(ObjectPath functionPath, boolean ignoreIfNotExists)

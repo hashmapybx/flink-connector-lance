@@ -28,13 +28,12 @@ import java.util.Map;
 import java.util.Objects;
 
 /**
- * Factory for creating and managing Lance Namespace Adapters and Catalogs.
- * 
- * This factory follows the factory pattern used in lance-spark, providing
- * a unified way to create LanceNamespaceAdapter instances with different
- * implementations (DirectoryNamespace, RestNamespace, etc.).
- * 
- * Example usage:
+ * Factory for creating and managing Lance Namespace connections.
+ *
+ * <p>Provides multiple ways to create {@link LanceNamespaceAdapter} instances,
+ * supporting different backend implementations such as directory mode and REST mode.</p>
+ *
+ * <p>Example usage:</p>
  * <pre>
  * LanceCatalogFactory factory = new LanceCatalogFactory();
  * LanceNamespaceConfig config = LanceNamespaceConfig.builder()
@@ -42,6 +41,8 @@ import java.util.Objects;
  *     .root("/data/lance")
  *     .build();
  * LanceNamespaceAdapter adapter = factory.createAdapter(config);
+ * // Use the LanceNamespace API directly
+ * LanceNamespace ns = adapter.getNamespace();
  * </pre>
  */
 public class LanceCatalogFactory {
@@ -51,7 +52,7 @@ public class LanceCatalogFactory {
     private volatile BufferAllocator sharedAllocator;
     
     /**
-     * Create a new factory with a shared buffer allocator.
+     * Creates a factory with a shared BufferAllocator.
      */
     public LanceCatalogFactory() {
         this.sharedAllocator = new RootAllocator();
@@ -59,7 +60,7 @@ public class LanceCatalogFactory {
     }
     
     /**
-     * Create a new factory with a custom buffer allocator.
+     * Creates a factory with a custom BufferAllocator.
      */
     public LanceCatalogFactory(BufferAllocator allocator) {
         this.sharedAllocator = Objects.requireNonNull(allocator, "Allocator cannot be null");
@@ -67,10 +68,10 @@ public class LanceCatalogFactory {
     }
     
     /**
-     * Create a LanceNamespaceAdapter from configuration.
-     * 
-     * @param config The namespace configuration
-     * @return A configured LanceNamespaceAdapter
+     * Creates a LanceNamespaceAdapter from the given configuration.
+     *
+     * @param config namespace configuration
+     * @return a configured LanceNamespaceAdapter
      */
     public LanceNamespaceAdapter createAdapter(LanceNamespaceConfig config) {
         LOG.info("Creating LanceNamespaceAdapter with config");
@@ -101,10 +102,10 @@ public class LanceCatalogFactory {
     }
     
     /**
-     * Create a LanceNamespaceAdapter from properties map.
-     * 
-     * @param properties The properties map
-     * @return A configured LanceNamespaceAdapter
+     * Creates a LanceNamespaceAdapter from the given properties map.
+     *
+     * @param properties properties map
+     * @return a configured LanceNamespaceAdapter
      */
     public LanceNamespaceAdapter createAdapter(Map<String, String> properties) {
         LOG.info("Creating LanceNamespaceAdapter from properties");
@@ -116,10 +117,10 @@ public class LanceCatalogFactory {
     }
     
     /**
-     * Create a LanceNamespaceAdapter with directory namespace implementation.
-     * 
-     * @param rootPath The root directory path
-     * @return A configured LanceNamespaceAdapter
+     * Creates a directory-mode LanceNamespaceAdapter.
+     *
+     * @param rootPath root directory path
+     * @return a configured LanceNamespaceAdapter
      */
     public LanceNamespaceAdapter createDirectoryAdapter(String rootPath) {
         LOG.info("Creating directory namespace adapter with root: {}", rootPath);
@@ -135,10 +136,10 @@ public class LanceCatalogFactory {
     }
     
     /**
-     * Create a LanceNamespaceAdapter with REST namespace implementation.
-     * 
-     * @param uri The REST service URI
-     * @return A configured LanceNamespaceAdapter
+     * Creates a REST-mode LanceNamespaceAdapter.
+     *
+     * @param uri REST service URI
+     * @return a configured LanceNamespaceAdapter
      */
     public LanceNamespaceAdapter createRestAdapter(String uri) {
         LOG.info("Creating REST namespace adapter with URI: {}", uri);
@@ -154,14 +155,14 @@ public class LanceCatalogFactory {
     }
     
     /**
-     * Get the shared buffer allocator.
+     * Returns the shared BufferAllocator.
      */
     public BufferAllocator getSharedAllocator() {
         return sharedAllocator;
     }
     
     /**
-     * Close the factory and cleanup resources.
+     * Closes the factory and releases resources.
      */
     public void close() {
         LOG.info("Closing LanceCatalogFactory");
