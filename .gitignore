@@ -39,3 +39,6 @@ build/
 
 ### CodeBuddy ###
 .codebuddy/
+
+### Subagent Configuration ###
+.agents/
