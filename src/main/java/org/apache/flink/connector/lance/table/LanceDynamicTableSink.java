@@ -18,6 +18,7 @@
 
 package org.apache.flink.connector.lance.table;
 
+import org.apache.flink.connector.lance.LanceDeleteExecutor;
 import org.apache.flink.connector.lance.LanceSink;
 import org.apache.flink.connector.lance.config.LanceOptions;
 import org.apache.flink.streaming.api.datastream.DataStream;
@@ -36,6 +37,8 @@ import org.apache.flink.types.RowKind;
  * Lance dynamic table sink.
  * 
  * <p>Implements DynamicTableSink interface, supports writing Flink data to Lance dataset.
+ * <p>Supports INSERT and DELETE operations. DELETE is handled via Lance's native
+ * predicate-based deletion using {@link LanceDeleteExecutor}.
  */
 public class LanceDynamicTableSink implements DynamicTableSink {
 
@@ -49,10 +52,16 @@ public class LanceDynamicTableSink implements DynamicTableSink {
 
     @Override
     public ChangelogMode getChangelogMode(ChangelogMode requestedMode) {
-        // Lance only supports INSERT operations
-        return ChangelogMode.newBuilder()
-                .addContainedKind(RowKind.INSERT)
-                .build();
+        // Lance supports INSERT and DELETE operations
+        ChangelogMode.Builder builder = ChangelogMode.newBuilder()
+                .addContainedKind(RowKind.INSERT);
+        
+        // Add DELETE support if requested
+        if (requestedMode.contains(RowKind.DELETE)) {
+            builder.addContainedKind(RowKind.DELETE);
+        }
+        
+        return builder.build();
     }
 
     @Override

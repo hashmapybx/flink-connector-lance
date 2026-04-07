@@ -27,7 +27,9 @@ import org.apache.flink.runtime.state.FunctionSnapshotContext;
 import org.apache.flink.streaming.api.checkpoint.CheckpointedFunction;
 import org.apache.flink.streaming.api.functions.sink.RichSinkFunction;
 import org.apache.flink.table.data.RowData;
+import org.apache.flink.table.types.logical.LogicalType;
 import org.apache.flink.table.types.logical.RowType;
+import org.apache.flink.types.RowKind;
 
 import com.lancedb.lance.Dataset;
 import com.lancedb.lance.Fragment;
@@ -53,7 +55,7 @@ import java.util.Optional;
 /**
  * Lance Sink implementation.
  * 
- * <p>Writes Flink RowData to Lance dataset, supports batch writing and Checkpoint.
+ * <p>Writes Flink RowData to Lance dataset, supports batch writing, Checkpoint, and DELETE operations.
  * 
  * <p>Usage example:
  * <pre>{@code
@@ -80,7 +82,9 @@ public class LanceSink extends RichSinkFunction<RowData> implements Checkpointed
     private transient RowDataConverter converter;
     private transient Schema arrowSchema;
     private transient List<RowData> buffer;
+    private transient List<RowData> deleteBuffer;
     private transient long totalWrittenRows;
+    private transient long totalDeletedRows;
     private transient boolean datasetExists;
     private transient boolean isFirstWrite;
 
@@ -103,7 +107,9 @@ public class LanceSink extends RichSinkFunction<RowData> implements Checkpointed
         
         this.allocator = new RootAllocator(Long.MAX_VALUE);
         this.buffer = new ArrayList<>(options.getWriteBatchSize());
+        this.deleteBuffer = new ArrayList<>();
         this.totalWrittenRows = 0;
+        this.totalDeletedRows = 0;
         this.isFirstWrite = true;
         
         // Initialize converter and Schema
@@ -131,12 +137,25 @@ public class LanceSink extends RichSinkFunction<RowData> implements Checkpointed
 
     @Override
     public void invoke(RowData value, Context context) throws Exception {
-        buffer.add(value);
+        RowKind rowKind = value.getRowKind();
         
-        // When buffer reaches batch size, execute write
-        if (buffer.size() >= options.getWriteBatchSize()) {
-            flush();
+        if (rowKind == RowKind.DELETE) {
+            // Buffer DELETE rows for batch processing
+            deleteBuffer.add(value);
+            
+            // Process deletes when buffer reaches batch size
+            if (deleteBuffer.size() >= options.getWriteBatchSize()) {
+                flushDeletes();
+            }
+        } else if (rowKind == RowKind.INSERT || rowKind == RowKind.UPDATE_AFTER) {
+            buffer.add(value);
+            
+            // When buffer reaches batch size, execute write
+            if (buffer.size() >= options.getWriteBatchSize()) {
+                flush();
+            }
         }
+        // Ignore UPDATE_BEFORE rows
     }
 
     /**
@@ -203,6 +222,7 @@ public class LanceSink extends RichSinkFunction<RowData> implements Checkpointed
         LOG.info("Closing Lance Sink");
         // Flush remaining data
         try {
+            flushDeletes();
             flush();
         } catch (Exception e) {
             LOG.warn("Failed to flush data on close", e);
@@ -225,7 +245,7 @@ public class LanceSink extends RichSinkFunction<RowData> implements Checkpointed
             allocator = null;
         }
         
-        LOG.info("Lance Sink closed, total written {} rows", totalWrittenRows);
+        LOG.info("Lance Sink closed, total written {} rows, total deleted {} rows", totalWrittenRows, totalDeletedRows);
         
         super.close();
     }
@@ -235,6 +255,7 @@ public class LanceSink extends RichSinkFunction<RowData> implements Checkpointed
         LOG.debug("Snapshot state, checkpointId: {}", context.getCheckpointId());
         
         // Flush all buffered data at Checkpoint
+        flushDeletes();
         flush();
     }
 
@@ -263,6 +284,134 @@ public class LanceSink extends RichSinkFunction<RowData> implements Checkpointed
      */
     public long getTotalWrittenRows() {
         return totalWrittenRows;
+    }
+
+    /**
+     * Get total deleted row count
+     */
+    public long getTotalDeletedRows() {
+        return totalDeletedRows;
+    }
+
+    /**
+     * Flush buffered DELETE operations.
+     * 
+     * <p>Builds a predicate from the buffered DELETE rows and executes
+     * the delete operation using Lance's native predicate-based deletion.
+     */
+    private void flushDeletes() throws IOException {
+        if (deleteBuffer.isEmpty()) {
+            return;
+        }
+        
+        LOG.debug("Flushing delete buffer, row count: {}", deleteBuffer.size());
+        
+        String datasetPath = options.getPath();
+        if (!datasetExists) {
+            LOG.warn("Cannot delete from non-existent dataset: {}", datasetPath);
+            deleteBuffer.clear();
+            return;
+        }
+        
+        try {
+            // Build delete predicate from buffered rows
+            String predicate = buildDeletePredicate(deleteBuffer);
+            
+            if (predicate != null && !predicate.isEmpty()) {
+                LOG.info("Executing DELETE with predicate: {}", predicate);
+                
+                try (Dataset deleteDataset = Dataset.open(datasetPath, allocator)) {
+                    deleteDataset.delete(predicate);
+                }
+                
+                totalDeletedRows += deleteBuffer.size();
+                LOG.debug("Deleted {} rows, total deleted: {} rows", deleteBuffer.size(), totalDeletedRows);
+            }
+            
+            deleteBuffer.clear();
+        } catch (Exception e) {
+            throw new IOException("Failed to execute DELETE on Lance dataset", e);
+        }
+    }
+
+    /**
+     * Build a delete predicate from a list of RowData.
+     * 
+     * <p>Constructs an OR-combined predicate where each row contributes
+     * an AND-combined equality condition on all fields.
+     * For example, for rows with fields (id=1, name='Alice') and (id=2, name='Bob'),
+     * the predicate would be:
+     * {@code (id = 1 AND name = 'Alice') OR (id = 2 AND name = 'Bob')}
+     *
+     * @param rows the rows to build the predicate from
+     * @return the combined predicate string
+     */
+    private String buildDeletePredicate(List<RowData> rows) {
+        List<String> rowPredicates = new ArrayList<>();
+        List<String> fieldNames = rowType.getFieldNames();
+        List<LogicalType> fieldTypes = new ArrayList<>();
+        for (RowType.RowField field : rowType.getFields()) {
+            fieldTypes.add(field.getType());
+        }
+        
+        for (RowData row : rows) {
+            List<String> fieldPredicates = new ArrayList<>();
+            for (int i = 0; i < fieldNames.size(); i++) {
+                String fieldName = fieldNames.get(i);
+                String value = extractFieldValue(row, i, fieldTypes.get(i));
+                if (value != null) {
+                    fieldPredicates.add(fieldName + " = " + value);
+                }
+            }
+            if (!fieldPredicates.isEmpty()) {
+                rowPredicates.add("(" + String.join(" AND ", fieldPredicates) + ")");
+            }
+        }
+        
+        if (rowPredicates.isEmpty()) {
+            return null;
+        }
+        
+        return String.join(" OR ", rowPredicates);
+    }
+
+    /**
+     * Extract a field value from RowData as a string suitable for a predicate.
+     *
+     * @param row       the RowData
+     * @param fieldIndex the field index
+     * @param type      the logical type of the field
+     * @return the field value as a predicate string, or null if the field is null
+     */
+    private String extractFieldValue(RowData row, int fieldIndex, LogicalType type) {
+        if (row.isNullAt(fieldIndex)) {
+            return null;
+        }
+        
+        switch (type.getTypeRoot()) {
+            case BOOLEAN:
+                return String.valueOf(row.getBoolean(fieldIndex));
+            case TINYINT:
+                return String.valueOf(row.getByte(fieldIndex));
+            case SMALLINT:
+                return String.valueOf(row.getShort(fieldIndex));
+            case INTEGER:
+                return String.valueOf(row.getInt(fieldIndex));
+            case BIGINT:
+                return String.valueOf(row.getLong(fieldIndex));
+            case FLOAT:
+                return String.valueOf(row.getFloat(fieldIndex));
+            case DOUBLE:
+                return String.valueOf(row.getDouble(fieldIndex));
+            case CHAR:
+            case VARCHAR:
+                String strValue = row.getString(fieldIndex).toString();
+                return "'" + strValue.replace("'", "''") + "'";
+            default:
+                // For unsupported types, skip this field in the predicate
+                LOG.debug("Unsupported type for delete predicate: {}", type);
+                return null;
+        }
     }
 
     /**
