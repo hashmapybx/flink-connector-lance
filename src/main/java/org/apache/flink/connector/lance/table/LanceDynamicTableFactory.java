@@ -79,6 +79,18 @@ public class LanceDynamicTableFactory implements DynamicTableSourceFactory, Dyna
             .noDefaultValue()
             .withDescription("Data filter condition");
 
+    public static final ConfigOption<Integer> READ_VERSION = ConfigOptions
+            .key("read.version")
+            .intType()
+            .noDefaultValue()
+            .withDescription("Dataset version for time travel");
+
+    public static final ConfigOption<Long> READ_TIMESTAMP = ConfigOptions
+            .key("read.timestamp")
+            .longType()
+            .noDefaultValue()
+            .withDescription("Timestamp in milliseconds for time travel");
+
     public static final ConfigOption<Integer> WRITE_BATCH_SIZE = ConfigOptions
             .key("write.batch-size")
             .intType()
@@ -157,6 +169,8 @@ public class LanceDynamicTableFactory implements DynamicTableSourceFactory, Dyna
         options.add(READ_BATCH_SIZE);
         options.add(READ_COLUMNS);
         options.add(READ_FILTER);
+        options.add(READ_VERSION);
+        options.add(READ_TIMESTAMP);
         options.add(WRITE_BATCH_SIZE);
         options.add(WRITE_MODE);
         options.add(WRITE_MAX_ROWS_PER_FILE);
@@ -215,6 +229,8 @@ public class LanceDynamicTableFactory implements DynamicTableSourceFactory, Dyna
             }
         });
         config.getOptional(READ_FILTER).ifPresent(builder::readFilter);
+        config.getOptional(READ_VERSION).ifPresent(builder::readVersion);
+        config.getOptional(READ_TIMESTAMP).ifPresent(builder::readTimestamp);
 
         // Sink configuration
         builder.writeBatchSize(config.get(WRITE_BATCH_SIZE));
