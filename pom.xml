@@ -21,7 +21,7 @@
         <!-- 版本管理 -->
         <flink.version>1.16.1</flink.version>
         <lance.version>0.23.3</lance.version>
-        <arrow.version>14.0.0</arrow.version>
+        <arrow.version>19.0.0</arrow.version>
         <junit.version>5.9.3</junit.version>
         <slf4j.version>1.7.36</slf4j.version>
         <log4j.version>2.20.0</log4j.version>
