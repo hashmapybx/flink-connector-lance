@@ -1,11 +1,7 @@
 /*
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
  *     http://www.apache.org/licenses/LICENSE-2.0
  *
@@ -15,7 +11,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.apache.flink.connector.lance;
 
 import org.apache.flink.connector.lance.config.LanceOptions;
@@ -38,151 +33,138 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-/**
- * LanceSource unit tests.
- */
+/** LanceSource unit tests. */
 class LanceSourceTest {
 
-    @TempDir
-    Path tempDir;
+  @TempDir Path tempDir;
 
-    private String datasetPath;
-    private RowType rowType;
+  private String datasetPath;
+  private RowType rowType;
 
-    @BeforeEach
-    void setUp() {
-        datasetPath = tempDir.resolve("test_dataset").toString();
-        
-        // Create test RowType
-        List<RowType.RowField> fields = new ArrayList<>();
-        fields.add(new RowType.RowField("id", new BigIntType()));
-        fields.add(new RowType.RowField("content", new VarCharType()));
-        fields.add(new RowType.RowField("embedding", new ArrayType(new FloatType())));
-        rowType = new RowType(fields);
-    }
+  @BeforeEach
+  void setUp() {
+    datasetPath = tempDir.resolve("test_dataset").toString();
 
-    @Test
-    @DisplayName("Test LanceSource configuration build")
-    void testSourceConfiguration() {
-        LanceOptions options = LanceOptions.builder()
-                .path(datasetPath)
-                .readBatchSize(512)
-                .readColumns(Arrays.asList("id", "content"))
-                .readFilter("id > 10")
-                .build();
+    // Create test RowType
+    List<RowType.RowField> fields = new ArrayList<>();
+    fields.add(new RowType.RowField("id", new BigIntType()));
+    fields.add(new RowType.RowField("content", new VarCharType()));
+    fields.add(new RowType.RowField("embedding", new ArrayType(new FloatType())));
+    rowType = new RowType(fields);
+  }
 
-        LanceSource source = new LanceSource(options, rowType);
+  @Test
+  @DisplayName("Test LanceSource configuration build")
+  void testSourceConfiguration() {
+    LanceOptions options =
+        LanceOptions.builder()
+            .path(datasetPath)
+            .readBatchSize(512)
+            .readColumns(Arrays.asList("id", "content"))
+            .readFilter("id > 10")
+            .build();
 
-        assertThat(source.getOptions().getPath()).isEqualTo(datasetPath);
-        assertThat(source.getOptions().getReadBatchSize()).isEqualTo(512);
-        assertThat(source.getOptions().getReadColumns()).containsExactly("id", "content");
-        assertThat(source.getOptions().getReadFilter()).isEqualTo("id > 10");
-        assertThat(source.getRowType()).isEqualTo(rowType);
-    }
+    LanceSource source = new LanceSource(options, rowType);
 
-    @Test
-    @DisplayName("Test LanceSource Builder pattern")
-    void testSourceBuilder() {
-        LanceSource source = LanceSource.builder()
-                .path(datasetPath)
-                .batchSize(256)
-                .columns(Arrays.asList("id"))
-                .filter("id < 100")
-                .rowType(rowType)
-                .build();
+    assertThat(source.getOptions().getPath()).isEqualTo(datasetPath);
+    assertThat(source.getOptions().getReadBatchSize()).isEqualTo(512);
+    assertThat(source.getOptions().getReadColumns()).containsExactly("id", "content");
+    assertThat(source.getOptions().getReadFilter()).isEqualTo("id > 10");
+    assertThat(source.getRowType()).isEqualTo(rowType);
+  }
 
-        assertThat(source.getOptions().getPath()).isEqualTo(datasetPath);
-        assertThat(source.getOptions().getReadBatchSize()).isEqualTo(256);
-        assertThat(source.getSelectedColumns()).containsExactly("id");
-    }
+  @Test
+  @DisplayName("Test LanceSource Builder pattern")
+  void testSourceBuilder() {
+    LanceSource source =
+        LanceSource.builder()
+            .path(datasetPath)
+            .batchSize(256)
+            .columns(Arrays.asList("id"))
+            .filter("id < 100")
+            .rowType(rowType)
+            .build();
 
-    @Test
-    @DisplayName("Test LanceSource Builder throws exception when missing path")
-    void testSourceBuilderMissingPath() {
-        assertThatThrownBy(() -> LanceSource.builder()
-                .rowType(rowType)
-                .build())
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("Dataset path cannot be empty");
-    }
+    assertThat(source.getOptions().getPath()).isEqualTo(datasetPath);
+    assertThat(source.getOptions().getReadBatchSize()).isEqualTo(256);
+    assertThat(source.getSelectedColumns()).containsExactly("id");
+  }
 
-    @Test
-    @DisplayName("Test LanceSplit creation")
-    void testLanceSplit() {
-        LanceSplit split = new LanceSplit(0, 1, datasetPath, 1000);
+  @Test
+  @DisplayName("Test LanceSource Builder throws exception when missing path")
+  void testSourceBuilderMissingPath() {
+    assertThatThrownBy(() -> LanceSource.builder().rowType(rowType).build())
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("Dataset path cannot be empty");
+  }
 
-        assertThat(split.getSplitNumber()).isEqualTo(0);
-        assertThat(split.getFragmentId()).isEqualTo(1);
-        assertThat(split.getDatasetPath()).isEqualTo(datasetPath);
-        assertThat(split.getRowCount()).isEqualTo(1000);
-    }
+  @Test
+  @DisplayName("Test LanceSplit creation")
+  void testLanceSplit() {
+    LanceSplit split = new LanceSplit(0, 1, datasetPath, 1000);
 
-    @Test
-    @DisplayName("Test LanceSplit equality")
-    void testLanceSplitEquality() {
-        LanceSplit split1 = new LanceSplit(0, 1, datasetPath, 1000);
-        LanceSplit split2 = new LanceSplit(0, 1, datasetPath, 1000);
-        LanceSplit split3 = new LanceSplit(1, 2, datasetPath, 2000);
+    assertThat(split.getSplitNumber()).isEqualTo(0);
+    assertThat(split.getFragmentId()).isEqualTo(1);
+    assertThat(split.getDatasetPath()).isEqualTo(datasetPath);
+    assertThat(split.getRowCount()).isEqualTo(1000);
+  }
 
-        assertThat(split1).isEqualTo(split2);
-        assertThat(split1.hashCode()).isEqualTo(split2.hashCode());
-        assertThat(split1).isNotEqualTo(split3);
-    }
+  @Test
+  @DisplayName("Test LanceSplit equality")
+  void testLanceSplitEquality() {
+    LanceSplit split1 = new LanceSplit(0, 1, datasetPath, 1000);
+    LanceSplit split2 = new LanceSplit(0, 1, datasetPath, 1000);
+    LanceSplit split3 = new LanceSplit(1, 2, datasetPath, 2000);
 
-    @Test
-    @DisplayName("Test LanceInputFormat configuration")
-    void testInputFormatConfiguration() {
-        LanceOptions options = LanceOptions.builder()
-                .path(datasetPath)
-                .readBatchSize(128)
-                .build();
+    assertThat(split1).isEqualTo(split2);
+    assertThat(split1.hashCode()).isEqualTo(split2.hashCode());
+    assertThat(split1).isNotEqualTo(split3);
+  }
 
-        LanceInputFormat inputFormat = new LanceInputFormat(options, rowType);
+  @Test
+  @DisplayName("Test LanceInputFormat configuration")
+  void testInputFormatConfiguration() {
+    LanceOptions options = LanceOptions.builder().path(datasetPath).readBatchSize(128).build();
 
-        assertThat(inputFormat.getOptions().getPath()).isEqualTo(datasetPath);
-        assertThat(inputFormat.getOptions().getReadBatchSize()).isEqualTo(128);
-        assertThat(inputFormat.getRowType()).isEqualTo(rowType);
-    }
+    LanceInputFormat inputFormat = new LanceInputFormat(options, rowType);
 
-    @Test
-    @DisplayName("Test default configuration values")
-    void testDefaultConfiguration() {
-        LanceOptions options = LanceOptions.builder()
-                .path(datasetPath)
-                .build();
+    assertThat(inputFormat.getOptions().getPath()).isEqualTo(datasetPath);
+    assertThat(inputFormat.getOptions().getReadBatchSize()).isEqualTo(128);
+    assertThat(inputFormat.getRowType()).isEqualTo(rowType);
+  }
 
-        // Verify default values
-        assertThat(options.getReadBatchSize()).isEqualTo(1024);
-        assertThat(options.getReadColumns()).isEmpty();
-        assertThat(options.getReadFilter()).isNull();
-    }
+  @Test
+  @DisplayName("Test default configuration values")
+  void testDefaultConfiguration() {
+    LanceOptions options = LanceOptions.builder().path(datasetPath).build();
 
-    @Test
-    @DisplayName("Test configuration validation - invalid batch size")
-    void testInvalidBatchSize() {
-        assertThatThrownBy(() -> LanceOptions.builder()
-                .path(datasetPath)
-                .readBatchSize(0)
-                .build())
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("batch-size");
-    }
+    // Verify default values
+    assertThat(options.getReadBatchSize()).isEqualTo(1024);
+    assertThat(options.getReadColumns()).isEmpty();
+    assertThat(options.getReadFilter()).isNull();
+  }
 
-    @Test
-    @DisplayName("Test vector type RowType")
-    void testVectorRowType() {
-        List<RowType.RowField> fields = new ArrayList<>();
-        fields.add(new RowType.RowField("id", new BigIntType()));
-        fields.add(new RowType.RowField("embedding", new ArrayType(new FloatType())));
-        RowType vectorRowType = new RowType(fields);
+  @Test
+  @DisplayName("Test configuration validation - invalid batch size")
+  void testInvalidBatchSize() {
+    assertThatThrownBy(() -> LanceOptions.builder().path(datasetPath).readBatchSize(0).build())
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("batch-size");
+  }
 
-        LanceOptions options = LanceOptions.builder()
-                .path(datasetPath)
-                .build();
+  @Test
+  @DisplayName("Test vector type RowType")
+  void testVectorRowType() {
+    List<RowType.RowField> fields = new ArrayList<>();
+    fields.add(new RowType.RowField("id", new BigIntType()));
+    fields.add(new RowType.RowField("embedding", new ArrayType(new FloatType())));
+    RowType vectorRowType = new RowType(fields);
 
-        LanceSource source = new LanceSource(options, vectorRowType);
+    LanceOptions options = LanceOptions.builder().path(datasetPath).build();
 
-        assertThat(source.getRowType().getFieldCount()).isEqualTo(2);
-        assertThat(source.getRowType().getTypeAt(1)).isInstanceOf(ArrayType.class);
-    }
+    LanceSource source = new LanceSource(options, vectorRowType);
+
+    assertThat(source.getRowType().getFieldCount()).isEqualTo(2);
+    assertThat(source.getRowType().getTypeAt(1)).isInstanceOf(ArrayType.class);
+  }
 }
