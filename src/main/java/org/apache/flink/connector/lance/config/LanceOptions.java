@@ -1,11 +1,7 @@
 /*
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
  *     http://www.apache.org/licenses/LICENSE-2.0
  *
@@ -15,7 +11,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.apache.flink.connector.lance.config;
 
 import org.apache.flink.configuration.ConfigOption;
@@ -30,820 +25,826 @@ import java.util.Objects;
 
 /**
  * Lance connector configuration options.
- * 
+ *
  * <p>Defines all configuration items for Source, Sink, vector index and vector search.
  */
 public class LanceOptions implements Serializable {
 
-    private static final long serialVersionUID = 1L;
+  private static final long serialVersionUID = 1L;
 
-    // ==================== Common Configuration ====================
+  // ==================== Common Configuration ====================
 
-    /**
-     * Lance dataset path
-     */
-    public static final ConfigOption<String> PATH = ConfigOptions
-            .key("path")
-            .stringType()
-            .noDefaultValue()
-            .withDescription("Path to Lance dataset (required)");
+  /** Lance dataset path */
+  public static final ConfigOption<String> PATH =
+      ConfigOptions.key("path")
+          .stringType()
+          .noDefaultValue()
+          .withDescription("Path to Lance dataset (required)");
 
-    // ==================== Source Configuration ====================
+  // ==================== Source Configuration ====================
 
-    /**
-     * Read batch size
-     */
-    public static final ConfigOption<Integer> READ_BATCH_SIZE = ConfigOptions
-            .key("read.batch-size")
-            .intType()
-            .defaultValue(1024)
-            .withDescription("Batch size for reading, default 1024");
+  /** Read batch size */
+  public static final ConfigOption<Integer> READ_BATCH_SIZE =
+      ConfigOptions.key("read.batch-size")
+          .intType()
+          .defaultValue(1024)
+          .withDescription("Batch size for reading, default 1024");
 
-    /**
-     * Read row limit (Limit push-down)
-     */
-    public static final ConfigOption<Long> READ_LIMIT = ConfigOptions
-            .key("read.limit")
-            .longType()
-            .noDefaultValue()
-            .withDescription("Maximum number of rows to read (for Limit push-down)");
+  /** Read row limit (Limit push-down) */
+  public static final ConfigOption<Long> READ_LIMIT =
+      ConfigOptions.key("read.limit")
+          .longType()
+          .noDefaultValue()
+          .withDescription("Maximum number of rows to read (for Limit push-down)");
 
-    /**
-     * List of columns to read (comma separated)
-     */
-    public static final ConfigOption<String> READ_COLUMNS = ConfigOptions
-            .key("read.columns")
-            .stringType()
-            .noDefaultValue()
-            .withDescription("List of columns to read, comma separated. Empty reads all columns");
+  /** List of columns to read (comma separated) */
+  public static final ConfigOption<String> READ_COLUMNS =
+      ConfigOptions.key("read.columns")
+          .stringType()
+          .noDefaultValue()
+          .withDescription("List of columns to read, comma separated. Empty reads all columns");
 
-    /**
-     * Data filter condition
-     */
-    public static final ConfigOption<String> READ_FILTER = ConfigOptions
-            .key("read.filter")
-            .stringType()
-            .noDefaultValue()
-            .withDescription("Data filter condition, using SQL WHERE clause syntax");
+  /** Data filter condition */
+  public static final ConfigOption<String> READ_FILTER =
+      ConfigOptions.key("read.filter")
+          .stringType()
+          .noDefaultValue()
+          .withDescription("Data filter condition, using SQL WHERE clause syntax");
 
-    // ==================== Sink Configuration ====================
+  // ==================== Sink Configuration ====================
 
-    /**
-     * Write batch size
-     */
-    public static final ConfigOption<Integer> WRITE_BATCH_SIZE = ConfigOptions
-            .key("write.batch-size")
-            .intType()
-            .defaultValue(1024)
-            .withDescription("Batch size for writing, default 1024");
+  /** Write batch size */
+  public static final ConfigOption<Integer> WRITE_BATCH_SIZE =
+      ConfigOptions.key("write.batch-size")
+          .intType()
+          .defaultValue(1024)
+          .withDescription("Batch size for writing, default 1024");
 
-    /**
-     * Write mode: append or overwrite
-     */
-    public static final ConfigOption<String> WRITE_MODE = ConfigOptions
-            .key("write.mode")
-            .stringType()
-            .defaultValue("append")
-            .withDescription("Write mode: append or overwrite, default append");
+  /** Write mode: append or overwrite */
+  public static final ConfigOption<String> WRITE_MODE =
+      ConfigOptions.key("write.mode")
+          .stringType()
+          .defaultValue("append")
+          .withDescription("Write mode: append or overwrite, default append");
 
-    /**
-     * Maximum rows per file
-     */
-    public static final ConfigOption<Integer> WRITE_MAX_ROWS_PER_FILE = ConfigOptions
-            .key("write.max-rows-per-file")
-            .intType()
-            .defaultValue(1000000)
-            .withDescription("Maximum rows per data file, default 1000000");
+  /** Maximum rows per file */
+  public static final ConfigOption<Integer> WRITE_MAX_ROWS_PER_FILE =
+      ConfigOptions.key("write.max-rows-per-file")
+          .intType()
+          .defaultValue(1000000)
+          .withDescription("Maximum rows per data file, default 1000000");
 
-    // ==================== Vector Index Configuration ====================
+  // ==================== Vector Index Configuration ====================
 
-    /**
-     * Index type: IVF_PQ, IVF_HNSW, IVF_FLAT
-     */
-    public static final ConfigOption<String> INDEX_TYPE = ConfigOptions
-            .key("index.type")
-            .stringType()
-            .defaultValue("IVF_PQ")
-            .withDescription("Vector index type: IVF_PQ, IVF_HNSW, IVF_FLAT, default IVF_PQ");
+  /** Index type: IVF_PQ, IVF_HNSW, IVF_FLAT */
+  public static final ConfigOption<String> INDEX_TYPE =
+      ConfigOptions.key("index.type")
+          .stringType()
+          .defaultValue("IVF_PQ")
+          .withDescription("Vector index type: IVF_PQ, IVF_HNSW, IVF_FLAT, default IVF_PQ");
 
-    /**
-     * Index column name
-     */
-    public static final ConfigOption<String> INDEX_COLUMN = ConfigOptions
-            .key("index.column")
-            .stringType()
-            .noDefaultValue()
-            .withDescription("Vector column name for indexing (required)");
+  /** Index column name */
+  public static final ConfigOption<String> INDEX_COLUMN =
+      ConfigOptions.key("index.column")
+          .stringType()
+          .noDefaultValue()
+          .withDescription("Vector column name for indexing (required)");
 
-    /**
-     * IVF partition count
-     */
-    public static final ConfigOption<Integer> INDEX_NUM_PARTITIONS = ConfigOptions
-            .key("index.num-partitions")
-            .intType()
-            .defaultValue(256)
-            .withDescription("Number of IVF index partitions, default 256");
+  /** IVF partition count */
+  public static final ConfigOption<Integer> INDEX_NUM_PARTITIONS =
+      ConfigOptions.key("index.num-partitions")
+          .intType()
+          .defaultValue(256)
+          .withDescription("Number of IVF index partitions, default 256");
 
-    /**
-     * PQ sub-vector count
-     */
-    public static final ConfigOption<Integer> INDEX_NUM_SUB_VECTORS = ConfigOptions
-            .key("index.num-sub-vectors")
-            .intType()
-            .noDefaultValue()
-            .withDescription("Number of PQ index sub-vectors, default auto-calculated");
+  /** PQ sub-vector count */
+  public static final ConfigOption<Integer> INDEX_NUM_SUB_VECTORS =
+      ConfigOptions.key("index.num-sub-vectors")
+          .intType()
+          .noDefaultValue()
+          .withDescription("Number of PQ index sub-vectors, default auto-calculated");
 
-    /**
-     * PQ quantization bits
-     */
-    public static final ConfigOption<Integer> INDEX_NUM_BITS = ConfigOptions
-            .key("index.num-bits")
-            .intType()
-            .defaultValue(8)
-            .withDescription("PQ quantization bits, default 8");
+  /** PQ quantization bits */
+  public static final ConfigOption<Integer> INDEX_NUM_BITS =
+      ConfigOptions.key("index.num-bits")
+          .intType()
+          .defaultValue(8)
+          .withDescription("PQ quantization bits, default 8");
 
-    /**
-     * HNSW max level
-     */
-    public static final ConfigOption<Integer> INDEX_MAX_LEVEL = ConfigOptions
-            .key("index.max-level")
-            .intType()
-            .defaultValue(7)
-            .withDescription("HNSW index max level, default 7");
+  /** HNSW max level */
+  public static final ConfigOption<Integer> INDEX_MAX_LEVEL =
+      ConfigOptions.key("index.max-level")
+          .intType()
+          .defaultValue(7)
+          .withDescription("HNSW index max level, default 7");
 
-    /**
-     * HNSW connections per level M
-     */
-    public static final ConfigOption<Integer> INDEX_M = ConfigOptions
-            .key("index.m")
-            .intType()
-            .defaultValue(16)
-            .withDescription("HNSW connections per level M, default 16");
+  /** HNSW connections per level M */
+  public static final ConfigOption<Integer> INDEX_M =
+      ConfigOptions.key("index.m")
+          .intType()
+          .defaultValue(16)
+          .withDescription("HNSW connections per level M, default 16");
 
-    /**
-     * HNSW construction search width
-     */
-    public static final ConfigOption<Integer> INDEX_EF_CONSTRUCTION = ConfigOptions
-            .key("index.ef-construction")
-            .intType()
-            .defaultValue(100)
-            .withDescription("HNSW construction search width ef_construction, default 100");
+  /** HNSW construction search width */
+  public static final ConfigOption<Integer> INDEX_EF_CONSTRUCTION =
+      ConfigOptions.key("index.ef-construction")
+          .intType()
+          .defaultValue(100)
+          .withDescription("HNSW construction search width ef_construction, default 100");
 
-    // ==================== Vector Search Configuration ====================
+  // ==================== Vector Search Configuration ====================
 
-    /**
-     * Vector search column name
-     */
-    public static final ConfigOption<String> VECTOR_COLUMN = ConfigOptions
-            .key("vector.column")
-            .stringType()
-            .noDefaultValue()
-            .withDescription("Vector search column name (required)");
+  /** Vector search column name */
+  public static final ConfigOption<String> VECTOR_COLUMN =
+      ConfigOptions.key("vector.column")
+          .stringType()
+          .noDefaultValue()
+          .withDescription("Vector search column name (required)");
 
-    /**
-     * Distance metric type: L2, Cosine, Dot
-     */
-    public static final ConfigOption<String> VECTOR_METRIC = ConfigOptions
-            .key("vector.metric")
-            .stringType()
-            .defaultValue("L2")
-            .withDescription("Vector distance metric type: L2 (Euclidean), Cosine, Dot, default L2");
+  /** Distance metric type: L2, Cosine, Dot */
+  public static final ConfigOption<String> VECTOR_METRIC =
+      ConfigOptions.key("vector.metric")
+          .stringType()
+          .defaultValue("L2")
+          .withDescription("Vector distance metric type: L2 (Euclidean), Cosine, Dot, default L2");
 
-    /**
-     * IVF search probe count
-     */
-    public static final ConfigOption<Integer> VECTOR_NPROBES = ConfigOptions
-            .key("vector.nprobes")
-            .intType()
-            .defaultValue(20)
-            .withDescription("Number of IVF index search probes, default 20");
+  /** IVF search probe count */
+  public static final ConfigOption<Integer> VECTOR_NPROBES =
+      ConfigOptions.key("vector.nprobes")
+          .intType()
+          .defaultValue(20)
+          .withDescription("Number of IVF index search probes, default 20");
 
-    /**
-     * HNSW search width
-     */
-    public static final ConfigOption<Integer> VECTOR_EF = ConfigOptions
-            .key("vector.ef")
-            .intType()
-            .defaultValue(100)
-            .withDescription("HNSW search width ef, default 100");
+  /** HNSW search width */
+  public static final ConfigOption<Integer> VECTOR_EF =
+      ConfigOptions.key("vector.ef")
+          .intType()
+          .defaultValue(100)
+          .withDescription("HNSW search width ef, default 100");
 
-    /**
-     * Refine factor
-     */
-    public static final ConfigOption<Integer> VECTOR_REFINE_FACTOR = ConfigOptions
-            .key("vector.refine-factor")
-            .intType()
-            .noDefaultValue()
-            .withDescription("Vector search refine factor for improving recall");
+  /** Refine factor */
+  public static final ConfigOption<Integer> VECTOR_REFINE_FACTOR =
+      ConfigOptions.key("vector.refine-factor")
+          .intType()
+          .noDefaultValue()
+          .withDescription("Vector search refine factor for improving recall");
 
-    // ==================== Catalog Configuration ====================
+  // ==================== Catalog Configuration ====================
 
-    /**
-     * Default database name
-     */
-    public static final ConfigOption<String> DEFAULT_DATABASE = ConfigOptions
-            .key("default-database")
-            .stringType()
-            .defaultValue("default")
-            .withDescription("Catalog default database name, default 'default'");
+  /** Default database name */
+  public static final ConfigOption<String> DEFAULT_DATABASE =
+      ConfigOptions.key("default-database")
+          .stringType()
+          .defaultValue("default")
+          .withDescription("Catalog default database name, default 'default'");
 
-    /**
-     * Warehouse path
-     */
-    public static final ConfigOption<String> WAREHOUSE = ConfigOptions
-            .key("warehouse")
-            .stringType()
-            .noDefaultValue()
-            .withDescription("Lance data warehouse path (required)");
+  /** Warehouse path */
+  public static final ConfigOption<String> WAREHOUSE =
+      ConfigOptions.key("warehouse")
+          .stringType()
+          .noDefaultValue()
+          .withDescription("Lance data warehouse path (required)");
 
-    // ==================== Write Mode Enum ====================
+  // ==================== Write Mode Enum ====================
 
-    /**
-     * Write mode enum
-     */
-    public enum WriteMode {
-        APPEND("append"),
-        OVERWRITE("overwrite");
+  /** Write mode enum */
+  public enum WriteMode {
+    APPEND("append"),
+    OVERWRITE("overwrite");
 
-        private final String value;
+    private final String value;
 
-        WriteMode(String value) {
-            this.value = value;
-        }
-
-        public String getValue() {
-            return value;
-        }
-
-        public static WriteMode fromValue(String value) {
-            for (WriteMode mode : values()) {
-                if (mode.value.equalsIgnoreCase(value)) {
-                    return mode;
-                }
-            }
-            throw new IllegalArgumentException("Unsupported write mode: " + value + ", supported modes: append, overwrite");
-        }
+    WriteMode(String value) {
+      this.value = value;
     }
 
-    // ==================== Index Type Enum ====================
-
-    /**
-     * Index type enum
-     */
-    public enum IndexType {
-        IVF_PQ("IVF_PQ"),
-        IVF_HNSW("IVF_HNSW"),
-        IVF_FLAT("IVF_FLAT");
-
-        private final String value;
-
-        IndexType(String value) {
-            this.value = value;
-        }
-
-        public String getValue() {
-            return value;
-        }
-
-        public static IndexType fromValue(String value) {
-            for (IndexType type : values()) {
-                if (type.value.equalsIgnoreCase(value)) {
-                    return type;
-                }
-            }
-            throw new IllegalArgumentException("Unsupported index type: " + value + ", supported types: IVF_PQ, IVF_HNSW, IVF_FLAT");
-        }
+    public String getValue() {
+      return value;
     }
 
-    // ==================== Metric Type Enum ====================
-
-    /**
-     * Distance metric type enum
-     */
-    public enum MetricType {
-        L2("L2"),
-        COSINE("Cosine"),
-        DOT("Dot");
-
-        private final String value;
-
-        MetricType(String value) {
-            this.value = value;
+    public static WriteMode fromValue(String value) {
+      for (WriteMode mode : values()) {
+        if (mode.value.equalsIgnoreCase(value)) {
+          return mode;
         }
+      }
+      throw new IllegalArgumentException(
+          "Unsupported write mode: " + value + ", supported modes: append, overwrite");
+    }
+  }
 
-        public String getValue() {
-            return value;
-        }
+  // ==================== Index Type Enum ====================
 
-        public static MetricType fromValue(String value) {
-            for (MetricType type : values()) {
-                if (type.value.equalsIgnoreCase(value)) {
-                    return type;
-                }
-            }
-            throw new IllegalArgumentException("Unsupported metric type: " + value + ", supported types: L2, Cosine, Dot");
-        }
+  /** Index type enum */
+  public enum IndexType {
+    IVF_PQ("IVF_PQ"),
+    IVF_HNSW("IVF_HNSW"),
+    IVF_FLAT("IVF_FLAT");
+
+    private final String value;
+
+    IndexType(String value) {
+      this.value = value;
     }
 
-    // ==================== Configuration Class ====================
-
-    private final String path;
-    private final int readBatchSize;
-    private final Long readLimit;
-    private final List<String> readColumns;
-    private final String readFilter;
-    private final int writeBatchSize;
-    private final WriteMode writeMode;
-    private final int writeMaxRowsPerFile;
-    private final IndexType indexType;
-    private final String indexColumn;
-    private final int indexNumPartitions;
-    private final Integer indexNumSubVectors;
-    private final int indexNumBits;
-    private final int indexMaxLevel;
-    private final int indexM;
-    private final int indexEfConstruction;
-    private final String vectorColumn;
-    private final MetricType vectorMetric;
-    private final int vectorNprobes;
-    private final int vectorEf;
-    private final Integer vectorRefineFactor;
-    private final String defaultDatabase;
-    private final String warehouse;
-
-    private LanceOptions(Builder builder) {
-        this.path = builder.path;
-        this.readBatchSize = builder.readBatchSize;
-        this.readLimit = builder.readLimit;
-        this.readColumns = builder.readColumns;
-        this.readFilter = builder.readFilter;
-        this.writeBatchSize = builder.writeBatchSize;
-        this.writeMode = builder.writeMode;
-        this.writeMaxRowsPerFile = builder.writeMaxRowsPerFile;
-        this.indexType = builder.indexType;
-        this.indexColumn = builder.indexColumn;
-        this.indexNumPartitions = builder.indexNumPartitions;
-        this.indexNumSubVectors = builder.indexNumSubVectors;
-        this.indexNumBits = builder.indexNumBits;
-        this.indexMaxLevel = builder.indexMaxLevel;
-        this.indexM = builder.indexM;
-        this.indexEfConstruction = builder.indexEfConstruction;
-        this.vectorColumn = builder.vectorColumn;
-        this.vectorMetric = builder.vectorMetric;
-        this.vectorNprobes = builder.vectorNprobes;
-        this.vectorEf = builder.vectorEf;
-        this.vectorRefineFactor = builder.vectorRefineFactor;
-        this.defaultDatabase = builder.defaultDatabase;
-        this.warehouse = builder.warehouse;
+    public String getValue() {
+      return value;
     }
 
-    // ==================== Getter Methods ====================
+    public static IndexType fromValue(String value) {
+      for (IndexType type : values()) {
+        if (type.value.equalsIgnoreCase(value)) {
+          return type;
+        }
+      }
+      throw new IllegalArgumentException(
+          "Unsupported index type: " + value + ", supported types: IVF_PQ, IVF_HNSW, IVF_FLAT");
+    }
+  }
 
-    public String getPath() {
-        return path;
+  // ==================== Metric Type Enum ====================
+
+  /** Distance metric type enum */
+  public enum MetricType {
+    L2("L2"),
+    COSINE("Cosine"),
+    DOT("Dot");
+
+    private final String value;
+
+    MetricType(String value) {
+      this.value = value;
     }
 
-    public int getReadBatchSize() {
-        return readBatchSize;
+    public String getValue() {
+      return value;
     }
 
-    public Long getReadLimit() {
-        return readLimit;
+    public static MetricType fromValue(String value) {
+      for (MetricType type : values()) {
+        if (type.value.equalsIgnoreCase(value)) {
+          return type;
+        }
+      }
+      throw new IllegalArgumentException(
+          "Unsupported metric type: " + value + ", supported types: L2, Cosine, Dot");
+    }
+  }
+
+  // ==================== Configuration Class ====================
+
+  private final String path;
+  private final int readBatchSize;
+  private final Long readLimit;
+  private final List<String> readColumns;
+  private final String readFilter;
+  private final int writeBatchSize;
+  private final WriteMode writeMode;
+  private final int writeMaxRowsPerFile;
+  private final IndexType indexType;
+  private final String indexColumn;
+  private final int indexNumPartitions;
+  private final Integer indexNumSubVectors;
+  private final int indexNumBits;
+  private final int indexMaxLevel;
+  private final int indexM;
+  private final int indexEfConstruction;
+  private final String vectorColumn;
+  private final MetricType vectorMetric;
+  private final int vectorNprobes;
+  private final int vectorEf;
+  private final Integer vectorRefineFactor;
+  private final String defaultDatabase;
+  private final String warehouse;
+
+  private LanceOptions(Builder builder) {
+    this.path = builder.path;
+    this.readBatchSize = builder.readBatchSize;
+    this.readLimit = builder.readLimit;
+    this.readColumns = builder.readColumns;
+    this.readFilter = builder.readFilter;
+    this.writeBatchSize = builder.writeBatchSize;
+    this.writeMode = builder.writeMode;
+    this.writeMaxRowsPerFile = builder.writeMaxRowsPerFile;
+    this.indexType = builder.indexType;
+    this.indexColumn = builder.indexColumn;
+    this.indexNumPartitions = builder.indexNumPartitions;
+    this.indexNumSubVectors = builder.indexNumSubVectors;
+    this.indexNumBits = builder.indexNumBits;
+    this.indexMaxLevel = builder.indexMaxLevel;
+    this.indexM = builder.indexM;
+    this.indexEfConstruction = builder.indexEfConstruction;
+    this.vectorColumn = builder.vectorColumn;
+    this.vectorMetric = builder.vectorMetric;
+    this.vectorNprobes = builder.vectorNprobes;
+    this.vectorEf = builder.vectorEf;
+    this.vectorRefineFactor = builder.vectorRefineFactor;
+    this.defaultDatabase = builder.defaultDatabase;
+    this.warehouse = builder.warehouse;
+  }
+
+  // ==================== Getter Methods ====================
+
+  public String getPath() {
+    return path;
+  }
+
+  public int getReadBatchSize() {
+    return readBatchSize;
+  }
+
+  public Long getReadLimit() {
+    return readLimit;
+  }
+
+  public List<String> getReadColumns() {
+    return readColumns;
+  }
+
+  public String getReadFilter() {
+    return readFilter;
+  }
+
+  public int getWriteBatchSize() {
+    return writeBatchSize;
+  }
+
+  public WriteMode getWriteMode() {
+    return writeMode;
+  }
+
+  public int getWriteMaxRowsPerFile() {
+    return writeMaxRowsPerFile;
+  }
+
+  public IndexType getIndexType() {
+    return indexType;
+  }
+
+  public String getIndexColumn() {
+    return indexColumn;
+  }
+
+  public int getIndexNumPartitions() {
+    return indexNumPartitions;
+  }
+
+  public Integer getIndexNumSubVectors() {
+    return indexNumSubVectors;
+  }
+
+  public int getIndexNumBits() {
+    return indexNumBits;
+  }
+
+  public int getIndexMaxLevel() {
+    return indexMaxLevel;
+  }
+
+  public int getIndexM() {
+    return indexM;
+  }
+
+  public int getIndexEfConstruction() {
+    return indexEfConstruction;
+  }
+
+  public String getVectorColumn() {
+    return vectorColumn;
+  }
+
+  public MetricType getVectorMetric() {
+    return vectorMetric;
+  }
+
+  public int getVectorNprobes() {
+    return vectorNprobes;
+  }
+
+  public int getVectorEf() {
+    return vectorEf;
+  }
+
+  public Integer getVectorRefineFactor() {
+    return vectorRefineFactor;
+  }
+
+  public String getDefaultDatabase() {
+    return defaultDatabase;
+  }
+
+  public String getWarehouse() {
+    return warehouse;
+  }
+
+  // ==================== Builder ====================
+
+  public static Builder builder() {
+    return new Builder();
+  }
+
+  /** Create LanceOptions from Flink Configuration */
+  public static LanceOptions fromConfiguration(Configuration config) {
+    Builder builder = builder();
+
+    // Common configuration
+    if (config.contains(PATH)) {
+      builder.path(config.get(PATH));
     }
 
-    public List<String> getReadColumns() {
-        return readColumns;
+    // Source configuration
+    builder.readBatchSize(config.get(READ_BATCH_SIZE));
+    if (config.contains(READ_LIMIT)) {
+      builder.readLimit(config.get(READ_LIMIT));
+    }
+    if (config.contains(READ_COLUMNS)) {
+      String columnsStr = config.get(READ_COLUMNS);
+      if (columnsStr != null && !columnsStr.isEmpty()) {
+        builder.readColumns(Arrays.asList(columnsStr.split(",")));
+      }
+    }
+    if (config.contains(READ_FILTER)) {
+      builder.readFilter(config.get(READ_FILTER));
     }
 
-    public String getReadFilter() {
-        return readFilter;
+    // Sink configuration
+    builder.writeBatchSize(config.get(WRITE_BATCH_SIZE));
+    builder.writeMode(WriteMode.fromValue(config.get(WRITE_MODE)));
+    builder.writeMaxRowsPerFile(config.get(WRITE_MAX_ROWS_PER_FILE));
+
+    // Index configuration
+    builder.indexType(IndexType.fromValue(config.get(INDEX_TYPE)));
+    if (config.contains(INDEX_COLUMN)) {
+      builder.indexColumn(config.get(INDEX_COLUMN));
+    }
+    builder.indexNumPartitions(config.get(INDEX_NUM_PARTITIONS));
+    if (config.contains(INDEX_NUM_SUB_VECTORS)) {
+      builder.indexNumSubVectors(config.get(INDEX_NUM_SUB_VECTORS));
+    }
+    builder.indexNumBits(config.get(INDEX_NUM_BITS));
+    builder.indexMaxLevel(config.get(INDEX_MAX_LEVEL));
+    builder.indexM(config.get(INDEX_M));
+    builder.indexEfConstruction(config.get(INDEX_EF_CONSTRUCTION));
+
+    // Vector search configuration
+    if (config.contains(VECTOR_COLUMN)) {
+      builder.vectorColumn(config.get(VECTOR_COLUMN));
+    }
+    builder.vectorMetric(MetricType.fromValue(config.get(VECTOR_METRIC)));
+    builder.vectorNprobes(config.get(VECTOR_NPROBES));
+    builder.vectorEf(config.get(VECTOR_EF));
+    if (config.contains(VECTOR_REFINE_FACTOR)) {
+      builder.vectorRefineFactor(config.get(VECTOR_REFINE_FACTOR));
     }
 
-    public int getWriteBatchSize() {
-        return writeBatchSize;
+    // Catalog configuration
+    builder.defaultDatabase(config.get(DEFAULT_DATABASE));
+    if (config.contains(WAREHOUSE)) {
+      builder.warehouse(config.get(WAREHOUSE));
     }
 
-    public WriteMode getWriteMode() {
-        return writeMode;
+    return builder.build();
+  }
+
+  /** Configuration builder */
+  public static class Builder {
+    private String path;
+    private int readBatchSize = 1024;
+    private Long readLimit;
+    private List<String> readColumns = Collections.emptyList();
+    private String readFilter;
+    private int writeBatchSize = 1024;
+    private WriteMode writeMode = WriteMode.APPEND;
+    private int writeMaxRowsPerFile = 1000000;
+    private IndexType indexType = IndexType.IVF_PQ;
+    private String indexColumn;
+    private int indexNumPartitions = 256;
+    private Integer indexNumSubVectors;
+    private int indexNumBits = 8;
+    private int indexMaxLevel = 7;
+    private int indexM = 16;
+    private int indexEfConstruction = 100;
+    private String vectorColumn;
+    private MetricType vectorMetric = MetricType.L2;
+    private int vectorNprobes = 20;
+    private int vectorEf = 100;
+    private Integer vectorRefineFactor;
+    private String defaultDatabase = "default";
+    private String warehouse;
+
+    public Builder path(String path) {
+      this.path = path;
+      return this;
     }
 
-    public int getWriteMaxRowsPerFile() {
-        return writeMaxRowsPerFile;
+    public Builder readBatchSize(int readBatchSize) {
+      this.readBatchSize = readBatchSize;
+      return this;
     }
 
-    public IndexType getIndexType() {
-        return indexType;
+    public Builder readLimit(Long readLimit) {
+      this.readLimit = readLimit;
+      return this;
     }
 
-    public String getIndexColumn() {
-        return indexColumn;
+    public Builder readColumns(List<String> readColumns) {
+      this.readColumns = readColumns != null ? readColumns : Collections.emptyList();
+      return this;
     }
 
-    public int getIndexNumPartitions() {
-        return indexNumPartitions;
+    public Builder readFilter(String readFilter) {
+      this.readFilter = readFilter;
+      return this;
     }
 
-    public Integer getIndexNumSubVectors() {
-        return indexNumSubVectors;
+    public Builder writeBatchSize(int writeBatchSize) {
+      this.writeBatchSize = writeBatchSize;
+      return this;
     }
 
-    public int getIndexNumBits() {
-        return indexNumBits;
+    public Builder writeMode(WriteMode writeMode) {
+      this.writeMode = writeMode;
+      return this;
     }
 
-    public int getIndexMaxLevel() {
-        return indexMaxLevel;
+    public Builder writeMaxRowsPerFile(int writeMaxRowsPerFile) {
+      this.writeMaxRowsPerFile = writeMaxRowsPerFile;
+      return this;
     }
 
-    public int getIndexM() {
-        return indexM;
+    public Builder indexType(IndexType indexType) {
+      this.indexType = indexType;
+      return this;
     }
 
-    public int getIndexEfConstruction() {
-        return indexEfConstruction;
+    public Builder indexColumn(String indexColumn) {
+      this.indexColumn = indexColumn;
+      return this;
     }
 
-    public String getVectorColumn() {
-        return vectorColumn;
+    public Builder indexNumPartitions(int indexNumPartitions) {
+      this.indexNumPartitions = indexNumPartitions;
+      return this;
     }
 
-    public MetricType getVectorMetric() {
-        return vectorMetric;
+    public Builder indexNumSubVectors(Integer indexNumSubVectors) {
+      this.indexNumSubVectors = indexNumSubVectors;
+      return this;
     }
 
-    public int getVectorNprobes() {
-        return vectorNprobes;
+    public Builder indexNumBits(int indexNumBits) {
+      this.indexNumBits = indexNumBits;
+      return this;
     }
 
-    public int getVectorEf() {
-        return vectorEf;
+    public Builder indexMaxLevel(int indexMaxLevel) {
+      this.indexMaxLevel = indexMaxLevel;
+      return this;
     }
 
-    public Integer getVectorRefineFactor() {
-        return vectorRefineFactor;
+    public Builder indexM(int indexM) {
+      this.indexM = indexM;
+      return this;
     }
 
-    public String getDefaultDatabase() {
-        return defaultDatabase;
+    public Builder indexEfConstruction(int indexEfConstruction) {
+      this.indexEfConstruction = indexEfConstruction;
+      return this;
     }
 
-    public String getWarehouse() {
-        return warehouse;
+    public Builder vectorColumn(String vectorColumn) {
+      this.vectorColumn = vectorColumn;
+      return this;
     }
 
-    // ==================== Builder ====================
-
-    public static Builder builder() {
-        return new Builder();
+    public Builder vectorMetric(MetricType vectorMetric) {
+      this.vectorMetric = vectorMetric;
+      return this;
     }
 
-    /**
-     * Create LanceOptions from Flink Configuration
-     */
-    public static LanceOptions fromConfiguration(Configuration config) {
-        Builder builder = builder();
-
-        // Common configuration
-        if (config.contains(PATH)) {
-            builder.path(config.get(PATH));
-        }
-
-        // Source configuration
-        builder.readBatchSize(config.get(READ_BATCH_SIZE));
-        if (config.contains(READ_LIMIT)) {
-            builder.readLimit(config.get(READ_LIMIT));
-        }
-        if (config.contains(READ_COLUMNS)) {
-            String columnsStr = config.get(READ_COLUMNS);
-            if (columnsStr != null && !columnsStr.isEmpty()) {
-                builder.readColumns(Arrays.asList(columnsStr.split(",")));
-            }
-        }
-        if (config.contains(READ_FILTER)) {
-            builder.readFilter(config.get(READ_FILTER));
-        }
-
-        // Sink configuration
-        builder.writeBatchSize(config.get(WRITE_BATCH_SIZE));
-        builder.writeMode(WriteMode.fromValue(config.get(WRITE_MODE)));
-        builder.writeMaxRowsPerFile(config.get(WRITE_MAX_ROWS_PER_FILE));
-
-        // Index configuration
-        builder.indexType(IndexType.fromValue(config.get(INDEX_TYPE)));
-        if (config.contains(INDEX_COLUMN)) {
-            builder.indexColumn(config.get(INDEX_COLUMN));
-        }
-        builder.indexNumPartitions(config.get(INDEX_NUM_PARTITIONS));
-        if (config.contains(INDEX_NUM_SUB_VECTORS)) {
-            builder.indexNumSubVectors(config.get(INDEX_NUM_SUB_VECTORS));
-        }
-        builder.indexNumBits(config.get(INDEX_NUM_BITS));
-        builder.indexMaxLevel(config.get(INDEX_MAX_LEVEL));
-        builder.indexM(config.get(INDEX_M));
-        builder.indexEfConstruction(config.get(INDEX_EF_CONSTRUCTION));
-
-        // Vector search configuration
-        if (config.contains(VECTOR_COLUMN)) {
-            builder.vectorColumn(config.get(VECTOR_COLUMN));
-        }
-        builder.vectorMetric(MetricType.fromValue(config.get(VECTOR_METRIC)));
-        builder.vectorNprobes(config.get(VECTOR_NPROBES));
-        builder.vectorEf(config.get(VECTOR_EF));
-        if (config.contains(VECTOR_REFINE_FACTOR)) {
-            builder.vectorRefineFactor(config.get(VECTOR_REFINE_FACTOR));
-        }
-
-        // Catalog configuration
-        builder.defaultDatabase(config.get(DEFAULT_DATABASE));
-        if (config.contains(WAREHOUSE)) {
-            builder.warehouse(config.get(WAREHOUSE));
-        }
-
-        return builder.build();
+    public Builder vectorNprobes(int vectorNprobes) {
+      this.vectorNprobes = vectorNprobes;
+      return this;
     }
 
-    /**
-     * Configuration builder
-     */
-    public static class Builder {
-        private String path;
-        private int readBatchSize = 1024;
-        private Long readLimit;
-        private List<String> readColumns = Collections.emptyList();
-        private String readFilter;
-        private int writeBatchSize = 1024;
-        private WriteMode writeMode = WriteMode.APPEND;
-        private int writeMaxRowsPerFile = 1000000;
-        private IndexType indexType = IndexType.IVF_PQ;
-        private String indexColumn;
-        private int indexNumPartitions = 256;
-        private Integer indexNumSubVectors;
-        private int indexNumBits = 8;
-        private int indexMaxLevel = 7;
-        private int indexM = 16;
-        private int indexEfConstruction = 100;
-        private String vectorColumn;
-        private MetricType vectorMetric = MetricType.L2;
-        private int vectorNprobes = 20;
-        private int vectorEf = 100;
-        private Integer vectorRefineFactor;
-        private String defaultDatabase = "default";
-        private String warehouse;
-
-        public Builder path(String path) {
-            this.path = path;
-            return this;
-        }
-
-        public Builder readBatchSize(int readBatchSize) {
-            this.readBatchSize = readBatchSize;
-            return this;
-        }
-
-        public Builder readLimit(Long readLimit) {
-            this.readLimit = readLimit;
-            return this;
-        }
-
-        public Builder readColumns(List<String> readColumns) {
-            this.readColumns = readColumns != null ? readColumns : Collections.emptyList();
-            return this;
-        }
-
-        public Builder readFilter(String readFilter) {
-            this.readFilter = readFilter;
-            return this;
-        }
-
-        public Builder writeBatchSize(int writeBatchSize) {
-            this.writeBatchSize = writeBatchSize;
-            return this;
-        }
-
-        public Builder writeMode(WriteMode writeMode) {
-            this.writeMode = writeMode;
-            return this;
-        }
-
-        public Builder writeMaxRowsPerFile(int writeMaxRowsPerFile) {
-            this.writeMaxRowsPerFile = writeMaxRowsPerFile;
-            return this;
-        }
-
-        public Builder indexType(IndexType indexType) {
-            this.indexType = indexType;
-            return this;
-        }
-
-        public Builder indexColumn(String indexColumn) {
-            this.indexColumn = indexColumn;
-            return this;
-        }
-
-        public Builder indexNumPartitions(int indexNumPartitions) {
-            this.indexNumPartitions = indexNumPartitions;
-            return this;
-        }
-
-        public Builder indexNumSubVectors(Integer indexNumSubVectors) {
-            this.indexNumSubVectors = indexNumSubVectors;
-            return this;
-        }
-
-        public Builder indexNumBits(int indexNumBits) {
-            this.indexNumBits = indexNumBits;
-            return this;
-        }
-
-        public Builder indexMaxLevel(int indexMaxLevel) {
-            this.indexMaxLevel = indexMaxLevel;
-            return this;
-        }
-
-        public Builder indexM(int indexM) {
-            this.indexM = indexM;
-            return this;
-        }
-
-        public Builder indexEfConstruction(int indexEfConstruction) {
-            this.indexEfConstruction = indexEfConstruction;
-            return this;
-        }
-
-        public Builder vectorColumn(String vectorColumn) {
-            this.vectorColumn = vectorColumn;
-            return this;
-        }
-
-        public Builder vectorMetric(MetricType vectorMetric) {
-            this.vectorMetric = vectorMetric;
-            return this;
-        }
-
-        public Builder vectorNprobes(int vectorNprobes) {
-            this.vectorNprobes = vectorNprobes;
-            return this;
-        }
-
-        public Builder vectorEf(int vectorEf) {
-            this.vectorEf = vectorEf;
-            return this;
-        }
-
-        public Builder vectorRefineFactor(Integer vectorRefineFactor) {
-            this.vectorRefineFactor = vectorRefineFactor;
-            return this;
-        }
-
-        public Builder defaultDatabase(String defaultDatabase) {
-            this.defaultDatabase = defaultDatabase;
-            return this;
-        }
-
-        public Builder warehouse(String warehouse) {
-            this.warehouse = warehouse;
-            return this;
-        }
-
-        /**
-         * Build LanceOptions instance with validation
-         */
-        public LanceOptions build() {
-            validate();
-            return new LanceOptions(this);
-        }
-
-        /**
-         * Validate configuration
-         */
-        private void validate() {
-            // Validate read batch size
-            if (readBatchSize <= 0) {
-                throw new IllegalArgumentException("read.batch-size must be greater than 0, current value: " + readBatchSize);
-            }
-
-            // Validate Limit (if set)
-            if (readLimit != null && readLimit < 0) {
-                throw new IllegalArgumentException("read.limit must be greater than or equal to 0, current value: " + readLimit);
-            }
-
-            // Validate write batch size
-            if (writeBatchSize <= 0) {
-                throw new IllegalArgumentException("write.batch-size must be greater than 0, current value: " + writeBatchSize);
-            }
-
-            // Validate max rows per file
-            if (writeMaxRowsPerFile <= 0) {
-                throw new IllegalArgumentException("write.max-rows-per-file must be greater than 0, current value: " + writeMaxRowsPerFile);
-            }
-
-            // Validate index partition count
-            if (indexNumPartitions <= 0) {
-                throw new IllegalArgumentException("index.num-partitions must be greater than 0, current value: " + indexNumPartitions);
-            }
-
-            // Validate PQ sub-vector count
-            if (indexNumSubVectors != null && indexNumSubVectors <= 0) {
-                throw new IllegalArgumentException("index.num-sub-vectors must be greater than 0, current value: " + indexNumSubVectors);
-            }
-
-            // Validate PQ quantization bits
-            if (indexNumBits <= 0 || indexNumBits > 16) {
-                throw new IllegalArgumentException("index.num-bits must be between 1 and 16, current value: " + indexNumBits);
-            }
-
-            // Validate HNSW parameters
-            if (indexMaxLevel <= 0) {
-                throw new IllegalArgumentException("index.max-level must be greater than 0, current value: " + indexMaxLevel);
-            }
-
-            if (indexM <= 0) {
-                throw new IllegalArgumentException("index.m must be greater than 0, current value: " + indexM);
-            }
-
-            if (indexEfConstruction <= 0) {
-                throw new IllegalArgumentException("index.ef-construction must be greater than 0, current value: " + indexEfConstruction);
-            }
-
-            // Validate vector search parameters
-            if (vectorNprobes <= 0) {
-                throw new IllegalArgumentException("vector.nprobes must be greater than 0, current value: " + vectorNprobes);
-            }
-
-            if (vectorEf <= 0) {
-                throw new IllegalArgumentException("vector.ef must be greater than 0, current value: " + vectorEf);
-            }
-
-            if (vectorRefineFactor != null && vectorRefineFactor <= 0) {
-                throw new IllegalArgumentException("vector.refine-factor must be greater than 0, current value: " + vectorRefineFactor);
-            }
-        }
+    public Builder vectorEf(int vectorEf) {
+      this.vectorEf = vectorEf;
+      return this;
     }
 
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
-        LanceOptions that = (LanceOptions) o;
-        return readBatchSize == that.readBatchSize &&
-                Objects.equals(readLimit, that.readLimit) &&
-                writeBatchSize == that.writeBatchSize &&
-                writeMaxRowsPerFile == that.writeMaxRowsPerFile &&
-                indexNumPartitions == that.indexNumPartitions &&
-                indexNumBits == that.indexNumBits &&
-                indexMaxLevel == that.indexMaxLevel &&
-                indexM == that.indexM &&
-                indexEfConstruction == that.indexEfConstruction &&
-                vectorNprobes == that.vectorNprobes &&
-                vectorEf == that.vectorEf &&
-                Objects.equals(path, that.path) &&
-                Objects.equals(readColumns, that.readColumns) &&
-                Objects.equals(readFilter, that.readFilter) &&
-                writeMode == that.writeMode &&
-                indexType == that.indexType &&
-                Objects.equals(indexColumn, that.indexColumn) &&
-                Objects.equals(indexNumSubVectors, that.indexNumSubVectors) &&
-                Objects.equals(vectorColumn, that.vectorColumn) &&
-                vectorMetric == that.vectorMetric &&
-                Objects.equals(vectorRefineFactor, that.vectorRefineFactor) &&
-                Objects.equals(defaultDatabase, that.defaultDatabase) &&
-                Objects.equals(warehouse, that.warehouse);
+    public Builder vectorRefineFactor(Integer vectorRefineFactor) {
+      this.vectorRefineFactor = vectorRefineFactor;
+      return this;
     }
 
-    @Override
-    public int hashCode() {
-        return Objects.hash(path, readBatchSize, readLimit, readColumns, readFilter, writeBatchSize, writeMode,
-                writeMaxRowsPerFile, indexType, indexColumn, indexNumPartitions, indexNumSubVectors,
-                indexNumBits, indexMaxLevel, indexM, indexEfConstruction, vectorColumn, vectorMetric,
-                vectorNprobes, vectorEf, vectorRefineFactor, defaultDatabase, warehouse);
+    public Builder defaultDatabase(String defaultDatabase) {
+      this.defaultDatabase = defaultDatabase;
+      return this;
     }
 
-    @Override
-    public String toString() {
-        return "LanceOptions{" +
-                "path='" + path + '\'' +
-                ", readBatchSize=" + readBatchSize +
-                ", readLimit=" + readLimit +
-                ", readColumns=" + readColumns +
-                ", readFilter='" + readFilter + '\'' +
-                ", writeBatchSize=" + writeBatchSize +
-                ", writeMode=" + writeMode +
-                ", writeMaxRowsPerFile=" + writeMaxRowsPerFile +
-                ", indexType=" + indexType +
-                ", indexColumn='" + indexColumn + '\'' +
-                ", indexNumPartitions=" + indexNumPartitions +
-                ", indexNumSubVectors=" + indexNumSubVectors +
-                ", indexNumBits=" + indexNumBits +
-                ", indexMaxLevel=" + indexMaxLevel +
-                ", indexM=" + indexM +
-                ", indexEfConstruction=" + indexEfConstruction +
-                ", vectorColumn='" + vectorColumn + '\'' +
-                ", vectorMetric=" + vectorMetric +
-                ", vectorNprobes=" + vectorNprobes +
-                ", vectorEf=" + vectorEf +
-                ", vectorRefineFactor=" + vectorRefineFactor +
-                ", defaultDatabase='" + defaultDatabase + '\'' +
-                ", warehouse='" + warehouse + '\'' +
-                '}';
+    public Builder warehouse(String warehouse) {
+      this.warehouse = warehouse;
+      return this;
     }
+
+    /** Build LanceOptions instance with validation */
+    public LanceOptions build() {
+      validate();
+      return new LanceOptions(this);
+    }
+
+    /** Validate configuration */
+    private void validate() {
+      // Validate read batch size
+      if (readBatchSize <= 0) {
+        throw new IllegalArgumentException(
+            "read.batch-size must be greater than 0, current value: " + readBatchSize);
+      }
+
+      // Validate Limit (if set)
+      if (readLimit != null && readLimit < 0) {
+        throw new IllegalArgumentException(
+            "read.limit must be greater than or equal to 0, current value: " + readLimit);
+      }
+
+      // Validate write batch size
+      if (writeBatchSize <= 0) {
+        throw new IllegalArgumentException(
+            "write.batch-size must be greater than 0, current value: " + writeBatchSize);
+      }
+
+      // Validate max rows per file
+      if (writeMaxRowsPerFile <= 0) {
+        throw new IllegalArgumentException(
+            "write.max-rows-per-file must be greater than 0, current value: "
+                + writeMaxRowsPerFile);
+      }
+
+      // Validate index partition count
+      if (indexNumPartitions <= 0) {
+        throw new IllegalArgumentException(
+            "index.num-partitions must be greater than 0, current value: " + indexNumPartitions);
+      }
+
+      // Validate PQ sub-vector count
+      if (indexNumSubVectors != null && indexNumSubVectors <= 0) {
+        throw new IllegalArgumentException(
+            "index.num-sub-vectors must be greater than 0, current value: " + indexNumSubVectors);
+      }
+
+      // Validate PQ quantization bits
+      if (indexNumBits <= 0 || indexNumBits > 16) {
+        throw new IllegalArgumentException(
+            "index.num-bits must be between 1 and 16, current value: " + indexNumBits);
+      }
+
+      // Validate HNSW parameters
+      if (indexMaxLevel <= 0) {
+        throw new IllegalArgumentException(
+            "index.max-level must be greater than 0, current value: " + indexMaxLevel);
+      }
+
+      if (indexM <= 0) {
+        throw new IllegalArgumentException(
+            "index.m must be greater than 0, current value: " + indexM);
+      }
+
+      if (indexEfConstruction <= 0) {
+        throw new IllegalArgumentException(
+            "index.ef-construction must be greater than 0, current value: " + indexEfConstruction);
+      }
+
+      // Validate vector search parameters
+      if (vectorNprobes <= 0) {
+        throw new IllegalArgumentException(
+            "vector.nprobes must be greater than 0, current value: " + vectorNprobes);
+      }
+
+      if (vectorEf <= 0) {
+        throw new IllegalArgumentException(
+            "vector.ef must be greater than 0, current value: " + vectorEf);
+      }
+
+      if (vectorRefineFactor != null && vectorRefineFactor <= 0) {
+        throw new IllegalArgumentException(
+            "vector.refine-factor must be greater than 0, current value: " + vectorRefineFactor);
+      }
+    }
+  }
+
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) return true;
+    if (o == null || getClass() != o.getClass()) return false;
+    LanceOptions that = (LanceOptions) o;
+    return readBatchSize == that.readBatchSize
+        && Objects.equals(readLimit, that.readLimit)
+        && writeBatchSize == that.writeBatchSize
+        && writeMaxRowsPerFile == that.writeMaxRowsPerFile
+        && indexNumPartitions == that.indexNumPartitions
+        && indexNumBits == that.indexNumBits
+        && indexMaxLevel == that.indexMaxLevel
+        && indexM == that.indexM
+        && indexEfConstruction == that.indexEfConstruction
+        && vectorNprobes == that.vectorNprobes
+        && vectorEf == that.vectorEf
+        && Objects.equals(path, that.path)
+        && Objects.equals(readColumns, that.readColumns)
+        && Objects.equals(readFilter, that.readFilter)
+        && writeMode == that.writeMode
+        && indexType == that.indexType
+        && Objects.equals(indexColumn, that.indexColumn)
+        && Objects.equals(indexNumSubVectors, that.indexNumSubVectors)
+        && Objects.equals(vectorColumn, that.vectorColumn)
+        && vectorMetric == that.vectorMetric
+        && Objects.equals(vectorRefineFactor, that.vectorRefineFactor)
+        && Objects.equals(defaultDatabase, that.defaultDatabase)
+        && Objects.equals(warehouse, that.warehouse);
+  }
+
+  @Override
+  public int hashCode() {
+    return Objects.hash(
+        path,
+        readBatchSize,
+        readLimit,
+        readColumns,
+        readFilter,
+        writeBatchSize,
+        writeMode,
+        writeMaxRowsPerFile,
+        indexType,
+        indexColumn,
+        indexNumPartitions,
+        indexNumSubVectors,
+        indexNumBits,
+        indexMaxLevel,
+        indexM,
+        indexEfConstruction,
+        vectorColumn,
+        vectorMetric,
+        vectorNprobes,
+        vectorEf,
+        vectorRefineFactor,
+        defaultDatabase,
+        warehouse);
+  }
+
+  @Override
+  public String toString() {
+    return "LanceOptions{"
+        + "path='"
+        + path
+        + '\''
+        + ", readBatchSize="
+        + readBatchSize
+        + ", readLimit="
+        + readLimit
+        + ", readColumns="
+        + readColumns
+        + ", readFilter='"
+        + readFilter
+        + '\''
+        + ", writeBatchSize="
+        + writeBatchSize
+        + ", writeMode="
+        + writeMode
+        + ", writeMaxRowsPerFile="
+        + writeMaxRowsPerFile
+        + ", indexType="
+        + indexType
+        + ", indexColumn='"
+        + indexColumn
+        + '\''
+        + ", indexNumPartitions="
+        + indexNumPartitions
+        + ", indexNumSubVectors="
+        + indexNumSubVectors
+        + ", indexNumBits="
+        + indexNumBits
+        + ", indexMaxLevel="
+        + indexMaxLevel
+        + ", indexM="
+        + indexM
+        + ", indexEfConstruction="
+        + indexEfConstruction
+        + ", vectorColumn='"
+        + vectorColumn
+        + '\''
+        + ", vectorMetric="
+        + vectorMetric
+        + ", vectorNprobes="
+        + vectorNprobes
+        + ", vectorEf="
+        + vectorEf
+        + ", vectorRefineFactor="
+        + vectorRefineFactor
+        + ", defaultDatabase='"
+        + defaultDatabase
+        + '\''
+        + ", warehouse='"
+        + warehouse
+        + '\''
+        + '}';
+  }
 }
