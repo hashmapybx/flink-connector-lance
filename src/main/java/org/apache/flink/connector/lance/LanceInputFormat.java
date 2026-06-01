@@ -28,10 +28,10 @@ import org.apache.flink.core.io.InputSplitAssigner;
 import org.apache.flink.table.data.RowData;
 import org.apache.flink.table.types.logical.RowType;
 
-import com.lancedb.lance.Dataset;
-import com.lancedb.lance.Fragment;
-import com.lancedb.lance.ipc.LanceScanner;
-import com.lancedb.lance.ipc.ScanOptions;
+import org.lance.Dataset;
+import org.lance.Fragment;
+import org.lance.ipc.LanceScanner;
+import org.lance.ipc.ScanOptions;
 import org.apache.arrow.memory.BufferAllocator;
 import org.apache.arrow.memory.RootAllocator;
 import org.apache.arrow.vector.VectorSchemaRoot;
@@ -107,7 +107,7 @@ public class LanceInputFormat extends RichInputFormat<RowData, LanceSplit> {
 
         BufferAllocator tempAllocator = new RootAllocator(Long.MAX_VALUE);
         try {
-            Dataset tempDataset = Dataset.open(datasetPath, tempAllocator);
+            Dataset tempDataset = Dataset.open().allocator(tempAllocator).uri(datasetPath).build();
             try {
                 List<Fragment> fragments = tempDataset.getFragments();
                 LanceSplit[] splits = new LanceSplit[fragments.size()];
@@ -143,7 +143,7 @@ public class LanceInputFormat extends RichInputFormat<RowData, LanceSplit> {
         // Open dataset
         String datasetPath = split.getDatasetPath();
         try {
-            this.dataset = Dataset.open(datasetPath, allocator);
+            this.dataset = Dataset.open().allocator(allocator).uri(datasetPath).build();
         } catch (Exception e) {
             throw new IOException("Cannot open dataset: " + datasetPath, e);
         }

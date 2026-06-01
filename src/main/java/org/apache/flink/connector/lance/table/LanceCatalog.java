@@ -49,7 +49,7 @@ import org.apache.flink.table.expressions.Expression;
 import org.apache.flink.table.types.DataType;
 import org.apache.flink.table.types.logical.RowType;
 
-import com.lancedb.lance.Dataset;
+import org.lance.Dataset;
 import org.apache.arrow.memory.BufferAllocator;
 import org.apache.arrow.memory.RootAllocator;
 import org.slf4j.Logger;
@@ -421,7 +421,7 @@ public class LanceCatalog extends AbstractCatalog {
             if (isRemoteStorage) {
                 configureStorageEnvironment();
             }
-            Dataset dataset = Dataset.open(datasetPath, allocator);
+            Dataset dataset = Dataset.open().allocator(allocator).uri(datasetPath).build();
             
             try {
                 // Infer Flink Schema from Lance Schema
@@ -476,7 +476,7 @@ public class LanceCatalog extends AbstractCatalog {
             // Try to open dataset to verify existence
             try {
                 configureStorageEnvironment();
-                Dataset dataset = Dataset.open(datasetPath, allocator);
+                Dataset dataset = Dataset.open().allocator(allocator).uri(datasetPath).build();
                 dataset.close();
                 knownTables.add(tableKey);
                 return true;

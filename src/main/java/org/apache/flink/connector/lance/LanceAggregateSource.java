@@ -28,10 +28,10 @@ import org.apache.flink.streaming.api.functions.source.RichParallelSourceFunctio
 import org.apache.flink.table.data.RowData;
 import org.apache.flink.table.types.logical.RowType;
 
-import com.lancedb.lance.Dataset;
-import com.lancedb.lance.Fragment;
-import com.lancedb.lance.ipc.LanceScanner;
-import com.lancedb.lance.ipc.ScanOptions;
+import org.lance.Dataset;
+import org.lance.Fragment;
+import org.lance.ipc.LanceScanner;
+import org.lance.ipc.ScanOptions;
 import org.apache.arrow.memory.BufferAllocator;
 import org.apache.arrow.memory.RootAllocator;
 import org.apache.arrow.vector.VectorSchemaRoot;
@@ -111,7 +111,7 @@ public class LanceAggregateSource extends RichParallelSourceFunction<RowData> {
         }
 
         try {
-            this.dataset = Dataset.open(datasetPath, allocator);
+            this.dataset = Dataset.open().allocator(allocator).uri(datasetPath).build();
         } catch (Exception e) {
             throw new IOException("Failed to open Lance dataset: " + datasetPath, e);
         }
