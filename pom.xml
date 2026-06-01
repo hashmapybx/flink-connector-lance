@@ -20,8 +20,8 @@
         
         <!-- 版本管理 -->
         <flink.version>1.16.1</flink.version>
-        <lance.version>5.0.0-beta.6</lance.version>
-        <arrow.version>15.0.2</arrow.version>
+        <lance.version>7.0.0</lance.version>
+        <arrow.version>18.3.0</arrow.version>
         <junit.version>5.10.1</junit.version>
         <slf4j.version>1.7.36</slf4j.version>
         <log4j.version>2.20.0</log4j.version>
@@ -248,7 +248,7 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-shade-plugin</artifactId>
-                <version>3.5.0</version>
+                <version>3.6.2</version>
                 <executions>
                     <execution>
                         <phase>package</phase>
