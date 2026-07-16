@@ -29,11 +29,14 @@ import org.apache.flink.streaming.api.functions.sink.RichSinkFunction;
 import org.apache.flink.table.data.RowData;
 import org.apache.flink.table.types.logical.RowType;
 
-import com.lancedb.lance.Dataset;
-import com.lancedb.lance.Fragment;
-import com.lancedb.lance.FragmentMetadata;
-import com.lancedb.lance.FragmentOperation;
-import com.lancedb.lance.WriteParams;
+import org.lance.Dataset;
+import org.lance.Fragment;
+import org.lance.FragmentMetadata;
+import org.lance.WriteParams;
+import org.lance.CommitBuilder;
+import org.lance.Transaction;
+import org.lance.operation.Append;
+import org.lance.operation.Overwrite;
 import org.apache.arrow.memory.BufferAllocator;
 import org.apache.arrow.memory.RootAllocator;
 import org.apache.arrow.vector.VectorSchemaRoot;
@@ -48,7 +51,6 @@ import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.Optional;
 
 /**
  * Lance Sink implementation.
@@ -161,17 +163,21 @@ public class LanceSink extends RichSinkFunction<RowData> implements Checkpointed
                     .build();
             
             // Create Fragment
-            List<FragmentMetadata> fragments = Fragment.create(
-                    datasetPath,
-                    allocator,
-                    root,
-                    writeParams
-            );
+            List<FragmentMetadata> fragments = Fragment.write()
+                    .datasetUri(datasetPath)
+                    .allocator(allocator)
+                    .data(root)
+                    .writeParams(writeParams)
+                    .execute();
             
             if (!datasetExists) {
                 // Create new dataset (using Overwrite operation)
-                FragmentOperation.Overwrite overwrite = new FragmentOperation.Overwrite(fragments, arrowSchema);
-                dataset = overwrite.commit(allocator, datasetPath, Optional.empty(), Collections.emptyMap());
+                Overwrite operation = Overwrite.builder().fragments(fragments).schema(arrowSchema).build();
+                final CommitBuilder builder =
+                        new CommitBuilder(datasetPath, allocator).writeParams(Collections.emptyMap());
+                try (Transaction txn = new Transaction.Builder().operation(operation).build()) {
+                    dataset = builder.execute(txn);
+                }
                 datasetExists = true;
                 isFirstWrite = false;
                 LOG.info("Created new dataset: {}", datasetPath);
@@ -179,13 +185,19 @@ public class LanceSink extends RichSinkFunction<RowData> implements Checkpointed
                 // Append data
                 if (isFirstWrite && options.getWriteMode() == LanceOptions.WriteMode.OVERWRITE) {
                     // First write and overwrite mode
-                    FragmentOperation.Overwrite overwrite = new FragmentOperation.Overwrite(fragments, arrowSchema);
-                    dataset = overwrite.commit(allocator, datasetPath, Optional.empty(), Collections.emptyMap());
+                    Overwrite operation = Overwrite.builder().fragments(fragments).schema(arrowSchema).build();
+                    final CommitBuilder builder = new CommitBuilder(datasetPath, allocator);
+                    try (Transaction txn = new Transaction.Builder().operation(operation).build()) {
+                        dataset = builder.execute(txn);
+                    }
                     isFirstWrite = false;
                 } else {
                     // Append mode
-                    FragmentOperation.Append append = new FragmentOperation.Append(fragments);
-                    dataset = append.commit(allocator, datasetPath, Optional.empty(), Collections.emptyMap());
+                    Append operation = Append.builder().fragments(fragments).build();
+                    final CommitBuilder builder = new CommitBuilder(datasetPath, allocator);
+                    try (Transaction txn = new Transaction.Builder().operation(operation).build()) {
+                        dataset = builder.execute(txn);
+                    }
                 }
             }
             

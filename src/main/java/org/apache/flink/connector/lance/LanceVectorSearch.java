@@ -26,11 +26,11 @@ import org.apache.flink.table.data.GenericRowData;
 import org.apache.flink.table.data.RowData;
 import org.apache.flink.table.types.logical.RowType;
 
-import com.lancedb.lance.Dataset;
-import com.lancedb.lance.index.DistanceType;
-import com.lancedb.lance.ipc.LanceScanner;
-import com.lancedb.lance.ipc.Query;
-import com.lancedb.lance.ipc.ScanOptions;
+import org.lance.Dataset;
+import org.lance.index.DistanceType;
+import org.lance.ipc.LanceScanner;
+import org.lance.ipc.Query;
+import org.lance.ipc.ScanOptions;
 import org.apache.arrow.memory.BufferAllocator;
 import org.apache.arrow.memory.RootAllocator;
 import org.apache.arrow.vector.Float8Vector;

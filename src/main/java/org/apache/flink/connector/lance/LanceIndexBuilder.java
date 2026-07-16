@@ -20,14 +20,14 @@ package org.apache.flink.connector.lance;
 
 import org.apache.flink.connector.lance.config.LanceOptions;
 
-import com.lancedb.lance.Dataset;
-import com.lancedb.lance.index.DistanceType;
-import com.lancedb.lance.index.IndexParams;
-import com.lancedb.lance.index.IndexType;
-import com.lancedb.lance.index.vector.HnswBuildParams;
-import com.lancedb.lance.index.vector.IvfBuildParams;
-import com.lancedb.lance.index.vector.PQBuildParams;
-import com.lancedb.lance.index.vector.VectorIndexParams;
+import org.lance.Dataset;
+import org.lance.index.DistanceType;
+import org.lance.index.IndexParams;
+import org.lance.index.IndexType;
+import org.lance.index.vector.HnswBuildParams;
+import org.lance.index.vector.IvfBuildParams;
+import org.lance.index.vector.PQBuildParams;
+import org.lance.index.vector.VectorIndexParams;
 import org.apache.arrow.memory.BufferAllocator;
 import org.apache.arrow.memory.RootAllocator;
 import org.slf4j.Logger;
@@ -131,8 +131,7 @@ public class LanceIndexBuilder implements Closeable, Serializable {
                             .build();
                     VectorIndexParams ivfPqParams = VectorIndexParams.withIvfPqParams(
                             distanceType, ivfParams, pqParams);
-                    indexParams = new IndexParams.Builder()
-                            .setDistanceType(distanceType)
+                    indexParams = IndexParams.builder()
                             .setVectorIndexParams(ivfPqParams)
                             .build();
                     break;
@@ -150,8 +149,7 @@ public class LanceIndexBuilder implements Closeable, Serializable {
                             .build();
                     VectorIndexParams ivfHnswParams = VectorIndexParams.withIvfHnswPqParams(
                             distanceType, ivfParams, hnswParams, hnswPqParams);
-                    indexParams = new IndexParams.Builder()
-                            .setDistanceType(distanceType)
+                    indexParams = IndexParams.builder()
                             .setVectorIndexParams(ivfHnswParams)
                             .build();
                     break;
@@ -159,8 +157,7 @@ public class LanceIndexBuilder implements Closeable, Serializable {
                 case IVF_FLAT:
                     lanceIndexType = IndexType.IVF_FLAT;
                     VectorIndexParams ivfFlatParams = VectorIndexParams.ivfFlat(numPartitions, distanceType);
-                    indexParams = new IndexParams.Builder()
-                            .setDistanceType(distanceType)
+                    indexParams = IndexParams.builder()
                             .setVectorIndexParams(ivfFlatParams)
                             .build();
                     break;

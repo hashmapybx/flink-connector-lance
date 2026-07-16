@@ -62,3 +62,15 @@ build/
 
 ### Lance test data (generated at runtime) ###
 test-data/
+
+### Local planning & research (not for upstream PR) ###
+.research/
+task_plan.md
+findings.md
+progress.md
+
+### Local planning & research (not for upstream PR) ###
+.research/
+task_plan.md
+findings.md
+progress.md
