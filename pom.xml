@@ -58,7 +58,36 @@
                         <groupId>org.slf4j</groupId>
                         <artifactId>slf4j-api</artifactId>
                     </exclusion>
+                    <exclusion>
+                        <groupId>org.apache.arrow</groupId>
+                        <artifactId>arrow-memory-core</artifactId>
+                    </exclusion>
                 </exclusions>
+            </dependency>
+
+            <!-- Explicitly manage arrow-memory-core to align with arrow-memory-netty version -->
+            <dependency>
+                <groupId>org.apache.arrow</groupId>
+                <artifactId>arrow-memory-core</artifactId>
+                <version>${arrow.version}</version>
+            </dependency>
+
+            <!-- ==================== Lance Namespace（可插拔 Catalog 后端契约）==================== -->
+            <!-- LanceNamespace 接口与插件注册表，所有 catalog 操作通过此接口路由到具体实现
+                 （dir / rest / glue / hive2 / unity 等）。详见：
+                 https://github.com/lancedb/lance-namespace -->
+            <dependency>
+                <groupId>org.lance</groupId>
+                <artifactId>lance-namespace-core</artifactId>
+                <version>${lance-namespace.version}</version>
+            </dependency>
+
+            <!-- OpenAPI 生成的 Apache HTTP 客户端，提供 Request/Response 模型类
+                 （DescribeTableResponse / CreateTableRequest 等），以及 RestNamespace 实现 -->
+            <dependency>
+                <groupId>org.lance</groupId>
+                <artifactId>lance-namespace-apache-client</artifactId>
+                <version>${lance-namespace.version}</version>
             </dependency>
 
             <!-- ==================== Apache Arrow ==================== -->

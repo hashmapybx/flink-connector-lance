@@ -26,6 +26,18 @@
             <artifactId>lance-core</artifactId>
         </dependency>
 
+        <!-- Lance Namespace：可插拔 Catalog 后端契约，及 OpenAPI 生成的
+             模型类（DescribeTableResponse / CreateTableRequest 等） -->
+        <dependency>
+            <groupId>org.lance</groupId>
+            <artifactId>lance-namespace-core</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.lance</groupId>
+            <artifactId>lance-namespace-apache-client</artifactId>
+        </dependency>
+
         <!-- Arrow -->
         <dependency>
             <groupId>org.apache.arrow</groupId>
