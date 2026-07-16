@@ -49,7 +49,7 @@ import org.apache.flink.table.expressions.Expression;
 import org.apache.flink.table.types.DataType;
 import org.apache.flink.table.types.logical.RowType;
 
-import com.lancedb.lance.Dataset;
+import org.lance.Dataset;
 import org.apache.arrow.memory.BufferAllocator;
 import org.apache.arrow.memory.RootAllocator;
 import org.slf4j.Logger;
