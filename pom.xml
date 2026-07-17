@@ -5,7 +5,7 @@
 
     <groupId>org.apache.flink</groupId>
     <artifactId>lance-flink-root</artifactId>
-    <version>1.0.0-SNAPSHOT</version>
+    <version>0.1.0</version>
     <packaging>pom</packaging>
 
     <name>Lance Flink Connector</name>
@@ -19,7 +19,7 @@
         <maven.compiler.target>11</maven.compiler.target>
 
         <!-- Lance Flink Connector 版本 -->
-        <lance-flink.version>1.0.0-SNAPSHOT</lance-flink.version>
+        <lance-flink.version>0.1.0</lance-flink.version>
 
         <!-- Lance 依赖版本 -->
         <lance.version>7.0.0</lance.version>
