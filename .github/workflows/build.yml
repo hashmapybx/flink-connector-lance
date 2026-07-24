@@ -31,6 +31,7 @@ jobs:
   build:
     name: Flink ${{ matrix.flink }} / JDK ${{ matrix.java }}
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -47,6 +48,6 @@ jobs:
           java-version: ${{ matrix.java }}
           cache: maven
 
-      - name: Build and test (lance-flink-${{ matrix.flink }})
+      - name: Build and run unit tests (lance-flink-${{ matrix.flink }})
         run: mvn -B -ntp -pl lance-flink-${{ matrix.flink }} verify
 
