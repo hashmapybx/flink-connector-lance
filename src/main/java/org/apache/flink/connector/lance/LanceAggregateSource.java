@@ -29,6 +29,7 @@ import org.apache.flink.table.data.RowData;
 import org.apache.flink.table.types.logical.RowType;
 
 import org.lance.Dataset;
+import org.apache.flink.connector.lance.util.LanceOpener;
 import org.lance.Fragment;
 import org.lance.ipc.LanceScanner;
 import org.lance.ipc.ScanOptions;
@@ -111,7 +112,8 @@ public class LanceAggregateSource extends RichParallelSourceFunction<RowData> {
         }
 
         try {
-            this.dataset = Dataset.open(datasetPath, allocator);
+            // Honor read.version / read.as-of-timestamp for time-travel reads (issue #5).
+            this.dataset = LanceOpener.open(datasetPath, allocator, options);
         } catch (Exception e) {
             throw new IOException("Failed to open Lance dataset: " + datasetPath, e);
         }

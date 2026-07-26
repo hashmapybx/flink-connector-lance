@@ -29,6 +29,7 @@ import org.apache.flink.table.data.RowData;
 import org.apache.flink.table.types.logical.RowType;
 
 import org.lance.Dataset;
+import org.apache.flink.connector.lance.util.LanceOpener;
 import org.lance.Fragment;
 import org.lance.ipc.LanceScanner;
 import org.lance.ipc.ScanOptions;
@@ -107,7 +108,8 @@ public class LanceInputFormat extends RichInputFormat<RowData, LanceSplit> {
 
         BufferAllocator tempAllocator = new RootAllocator(Long.MAX_VALUE);
         try {
-            Dataset tempDataset = Dataset.open(datasetPath, tempAllocator);
+            // Honor read.version / read.as-of-timestamp for time-travel reads (issue #5).
+            Dataset tempDataset = LanceOpener.open(datasetPath, tempAllocator, options);
             try {
                 List<Fragment> fragments = tempDataset.getFragments();
                 LanceSplit[] splits = new LanceSplit[fragments.size()];
@@ -143,7 +145,8 @@ public class LanceInputFormat extends RichInputFormat<RowData, LanceSplit> {
         // Open dataset
         String datasetPath = split.getDatasetPath();
         try {
-            this.dataset = Dataset.open(datasetPath, allocator);
+            // Honor read.version / read.as-of-timestamp for time-travel reads (issue #5).
+            this.dataset = LanceOpener.open(datasetPath, allocator, options);
         } catch (Exception e) {
             throw new IOException("Cannot open dataset: " + datasetPath, e);
         }
