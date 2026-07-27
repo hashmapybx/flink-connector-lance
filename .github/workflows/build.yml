@@ -62,7 +62,7 @@ jobs:
           cache: maven
 
       - name: Build and run unit tests (lance-flink-${{ matrix.flink }})
-        run: mvn -B -ntp -pl lance-flink-${{ matrix.flink }} verify
+        run: mvn -B -ntp -am -pl lance-flink-${{ matrix.flink }} verify
 
       - name: Upload surefire reports on failure
         if: failure()
