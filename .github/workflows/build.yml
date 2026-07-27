@@ -16,9 +16,15 @@ on:
   push:
     branches:
       - main
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
   pull_request:
     branches:
       - main
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -37,6 +43,13 @@ jobs:
       matrix:
         flink: ["1.18", "1.19", "1.20"]
         java: ["11", "17"]
+        include:
+          # Flink 1.19+ supports JDK 21; 1.18 only supports 8/11/17, so it is
+          # intentionally not paired with 21.
+          - flink: "1.19"
+            java: "21"
+          - flink: "1.20"
+            java: "21"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -50,4 +63,12 @@ jobs:
 
       - name: Build and run unit tests (lance-flink-${{ matrix.flink }})
         run: mvn -B -ntp -pl lance-flink-${{ matrix.flink }} verify
+
+      - name: Upload surefire reports on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: surefire-reports-flink${{ matrix.flink }}-jdk${{ matrix.java }}
+          path: '**/target/surefire-reports/**'
+          retention-days: 7
 
