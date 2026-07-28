@@ -201,6 +201,43 @@ class LanceTimeTravelITCase {
         }
     }
 
+    /**
+     * Utility test: when the environment variable {@code TT_EXPORT_DIR} is set, this test writes
+     * three versions (10/20/30 rows) to that directory instead of a {@code @TempDir}, and prints
+     * the resolved v1/v2/v3 version ids to stdout so an external orchestrator (e.g. a k8s smoke
+     * test) can consume them. Skipped in normal test runs.
+     */
+    @Test
+    @DisplayName("[opt-in] export a 3-version dataset to $TT_EXPORT_DIR for external E2E tests")
+    @org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable(named = "TT_EXPORT_DIR", matches = ".+")
+    void exportForExternalE2E() throws Exception {
+        String datasetPath = System.getenv("TT_EXPORT_DIR");
+        assertThat(datasetPath).as("TT_EXPORT_DIR must be set").isNotBlank();
+        java.io.File dir = new java.io.File(datasetPath);
+        // Fail fast if the target already looks like a Lance dataset — prevents accidental double-writes.
+        if (dir.exists() && dir.list() != null && dir.list().length > 0) {
+            throw new IllegalStateException("Refusing to write into non-empty dir " + datasetPath
+                    + " ; remove it first.");
+        }
+        Schema schema = simpleSchema();
+        try (BufferAllocator allocator = new RootAllocator(Long.MAX_VALUE)) {
+            long v1 = writeVersion(datasetPath, schema, allocator, 0, 10, true);
+            long v2 = writeVersion(datasetPath, schema, allocator, 10, 20, false);
+            long v3 = writeVersion(datasetPath, schema, allocator, 30, 30, false);
+
+            System.out.println();
+            System.out.println("### TT_EXPORT_DIR = " + datasetPath);
+            System.out.println("### TT_V1 = " + v1);
+            System.out.println("### TT_V2 = " + v2);
+            System.out.println("### TT_V3 = " + v3);
+            try (Dataset ds = Dataset.open(datasetPath, allocator)) {
+                System.out.println("### TT_LATEST_VERSION = " + ds.version());
+                System.out.println("### TT_LATEST_ROWCOUNT = " + ds.countRows());
+            }
+            System.out.println();
+        }
+    }
+
     // ============================ helpers ============================
 
     private static Schema simpleSchema() {
