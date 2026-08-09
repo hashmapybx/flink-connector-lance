@@ -30,7 +30,6 @@ import org.apache.flink.table.functions.BuiltInFunctionDefinition;
 import org.apache.flink.table.types.DataType;
 
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -50,7 +49,8 @@ import static org.junit.jupiter.api.Assertions.*;
  * <p>Test contents:
  * <ul>
  *   <li>Limit push-down</li>
- *   <li>Predicate push-down (basic comparison, IN, BETWEEN)</li>
+ *   <li>Predicate push-down (comparisons, AND/OR, IS NULL, LIKE; SQL IN arrives as an
+ *       OR chain, and BETWEEN is not implemented)</li>
  *   <li>Column pruning</li>
  * </ul>
  */
@@ -246,31 +246,37 @@ public class LanceReadOptimizationsTest {
         }
 
         @Test
-        @Disabled(
-                "IN predicate push-down is not yet implemented in the source; "
-                    + "convertToLanceFilter() returns null for BuiltInFunctionDefinitions.IN "
-                    + "(see LanceDynamicTableSource: \"IN (not supported yet)\"). "
-                    + "Re-enable once IN push-down lands.")
-        @DisplayName("Test IN predicate push-down")
+        @DisplayName("Test SQL IN is pushed down as an OR chain")
         void testInPredicatePushDown() {
             LanceDynamicTableSource source = new LanceDynamicTableSource(baseOptions, physicalDataType);
 
-            // Create status IN ('active', 'pending', 'completed') expression
-            FieldReferenceExpression fieldRef = new FieldReferenceExpression(
-                    "status", DataTypes.STRING(), 0, 2);
-            ValueLiteralExpression value1 = new ValueLiteralExpression("active");
-            ValueLiteralExpression value2 = new ValueLiteralExpression("pending");
-            ValueLiteralExpression value3 = new ValueLiteralExpression("completed");
-            
-            CallExpression inExpr = CallExpression.permanent(
-                    BuiltInFunctionDefinitions.IN,
-                    Arrays.asList(fieldRef, value1, value2, value3),
+            // The planner never hands BuiltInFunctionDefinitions.IN to applyFilters:
+            // Calcite expands IN over a literal list into OR(=, =, ...) while converting
+            // SQL to RelNode, and RexNodeExtractor expands any SEARCH/Sarg back into OR
+            // before extracting the conjunctive terms. So an EXPLAIN of
+            //   SELECT id FROM t WHERE status IN ('active', 'pending', 'completed')
+            // shows filter=[OR(OR(=(status,'active'), =(status,'pending')),
+            // =(status,'completed'))] pushed into the scan. Build that shape here rather
+            // than a bare IN call, so this exercises the expression the source really sees.
+            ResolvedExpression active = createEqualsExpression("status", "active");
+            ResolvedExpression pending = createEqualsExpression("status", "pending");
+            ResolvedExpression completed = createEqualsExpression("status", "completed");
+
+            CallExpression orExpr = CallExpression.permanent(
+                    BuiltInFunctionDefinitions.OR,
+                    Arrays.asList(
+                            CallExpression.permanent(
+                                    BuiltInFunctionDefinitions.OR,
+                                    Arrays.asList(active, pending),
+                                    DataTypes.BOOLEAN()),
+                            completed),
                     DataTypes.BOOLEAN()
             );
 
-            SupportsFilterPushDown.Result result = source.applyFilters(Collections.singletonList(inExpr));
+            SupportsFilterPushDown.Result result = source.applyFilters(Collections.singletonList(orExpr));
 
-            assertEquals(1, result.getAcceptedFilters().size(), "IN predicate should be accepted");
+            assertEquals(1, result.getAcceptedFilters().size(), "OR chain from IN should be accepted");
+            assertEquals(0, result.getRemainingFilters().size(), "Nothing should be left for Flink");
         }
 
         @Test
