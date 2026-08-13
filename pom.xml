@@ -18,6 +18,13 @@
         <maven.compiler.source>11</maven.compiler.source>
         <maven.compiler.target>11</maven.compiler.target>
 
+        <!-- Arrow 通过反射拿 java.nio.Buffer.address 来做堆外内存访问。JDK 17 起这属于
+             强封装，MemoryUtil 静态初始化会直接抛 RuntimeException，提示补这个 add-opens。
+             JDK 11 上只是一条 illegal reflective access 警告，加了同样无害。
+             surefire / failsafe 默认读 ${argLine}，jacoco:prepare-agent 会把 javaagent
+             追加到这个属性上而不是覆盖，所以两者能共存。 -->
+        <argLine>--add-opens=java.base/java.nio=ALL-UNNAMED</argLine>
+
         <!-- Lance Flink Connector 版本 -->
         <lance-flink.version>0.1.0</lance-flink.version>
 
