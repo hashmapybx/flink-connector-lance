@@ -279,6 +279,38 @@
                     <version>3.1.2</version>
                 </plugin>
 
+                <!-- Maven Failsafe 插件（跑 *ITCase 集成测试）
+
+                     classesDirectory 指向 target/classes 是必须的：shade 在 package 阶段
+                     把主 artifact 换成了 relocate 过 arrow 的 fat jar，而测试是按未 relocate
+                     的 arrow 签名编译的，failsafe 默认针对主 artifact 跑就会撞
+                     NoSuchMethodError。shaded jar 自身的正确性由 LanceShadedJarITCase
+                     单独校验。 -->
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-failsafe-plugin</artifactId>
+                    <version>3.1.2</version>
+                    <configuration>
+                        <includes>
+                            <include>**/*ITCase.java</include>
+                        </includes>
+                        <classesDirectory>${project.build.outputDirectory}</classesDirectory>
+                        <systemPropertyVariables>
+                            <lance.shaded.jar.dir>${project.build.directory}</lance.shaded.jar.dir>
+                            <lance.shaded.jar.name>${project.build.finalName}.jar</lance.shaded.jar.name>
+                        </systemPropertyVariables>
+                    </configuration>
+                    <executions>
+                        <execution>
+                            <id>integration-test</id>
+                            <goals>
+                                <goal>integration-test</goal>
+                                <goal>verify</goal>
+                            </goals>
+                        </execution>
+                    </executions>
+                </plugin>
+
                 <!-- Build Helper Maven Plugin (用于添加额外源码目录) -->
                 <plugin>
                     <groupId>org.codehaus.mojo</groupId>
@@ -465,6 +497,10 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-failsafe-plugin</artifactId>
             </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
