@@ -19,6 +19,7 @@
 package org.apache.flink.connector.lance.table;
 
 import org.apache.flink.connector.lance.catalog.namespace.LanceNamespaceConfig;
+import org.apache.flink.connector.lance.converter.LanceTypeConverter;
 
 import org.apache.flink.table.catalog.AbstractCatalog;
 import org.apache.flink.table.catalog.CatalogBaseTable;
@@ -40,6 +41,8 @@ import org.apache.flink.table.catalog.exceptions.TableNotExistException;
 import org.apache.flink.table.catalog.stats.CatalogColumnStatistics;
 import org.apache.flink.table.catalog.stats.CatalogTableStatistics;
 import org.apache.flink.table.expressions.Expression;
+import org.apache.flink.table.types.DataType;
+import org.apache.flink.table.types.logical.RowType;
 
 import org.lance.namespace.LanceNamespace;
 import org.lance.namespace.model.CreateNamespaceRequest;
@@ -56,9 +59,14 @@ import org.lance.namespace.model.NamespaceExistsRequest;
 import org.lance.namespace.model.TableExistsRequest;
 
 import org.apache.arrow.memory.BufferAllocator;
+import org.apache.arrow.vector.VectorSchemaRoot;
+import org.apache.arrow.vector.ipc.ArrowStreamWriter;
+import org.apache.arrow.vector.types.pojo.Schema;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -338,7 +346,9 @@ public class LanceNamespaceCatalog extends AbstractCatalog {
         }
 
         try {
-            namespace.createTable(new CreateTableRequest().id(tableId(tablePath)), new byte[0]);
+            byte[] arrowIpcSchema = toArrowIpcSchema(table, allocator);
+            namespace.createTable(
+                    new CreateTableRequest().id(tableId(tablePath)), arrowIpcSchema);
         } catch (RuntimeException e) {
             if (isAlreadyExists(e)) {
                 if (!ignoreIfExists) {
@@ -348,6 +358,61 @@ public class LanceNamespaceCatalog extends AbstractCatalog {
             }
             throw new CatalogException("Failed to create table: " + tablePath, e);
         }
+    }
+
+    /**
+     * Serialize a table's schema as an Arrow IPC stream.
+     *
+     * <p>{@code createTable} on the namespace API takes the request plus the table schema as an
+     * Arrow IPC stream; a directory-backed namespace rejects an empty body with {@code
+     * InvalidInputException code=13}, and a schema-only stream with {@code InternalException
+     * code=18}. So the stream carries the schema plus one batch of zero rows: enough for the
+     * namespace to derive the schema, while creating an empty dataset.
+     *
+     * @param table the table whose schema to serialize
+     * @param allocator the allocator backing the Arrow vectors
+     * @return the Arrow IPC stream bytes
+     */
+    static byte[] toArrowIpcSchema(CatalogBaseTable table, BufferAllocator allocator) {
+        Schema arrowSchema = LanceTypeConverter.toArrowSchema(resolveRowType(table));
+
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        try (VectorSchemaRoot root = VectorSchemaRoot.create(arrowSchema, allocator);
+                ArrowStreamWriter writer = new ArrowStreamWriter(root, null, out)) {
+            root.setRowCount(0);
+            writer.start();
+            writer.writeBatch();
+            writer.end();
+        } catch (IOException e) {
+            throw new CatalogException("Failed to serialize table schema as an Arrow IPC stream", e);
+        }
+        return out.toByteArray();
+    }
+
+    /**
+     * Build a {@link RowType} from a table's declared physical columns.
+     *
+     * @param table the table to read the schema from
+     * @return the row type of the table's physical columns
+     */
+    static RowType resolveRowType(CatalogBaseTable table) {
+        List<RowType.RowField> fields = new ArrayList<>();
+        for (org.apache.flink.table.api.Schema.UnresolvedColumn column :
+                table.getUnresolvedSchema().getColumns()) {
+            if (!(column instanceof org.apache.flink.table.api.Schema.UnresolvedPhysicalColumn)) {
+                // Computed and metadata columns are not part of the stored dataset.
+                continue;
+            }
+            org.apache.flink.table.api.Schema.UnresolvedPhysicalColumn physical =
+                    (org.apache.flink.table.api.Schema.UnresolvedPhysicalColumn) column;
+            DataType dataType = (DataType) physical.getDataType();
+            fields.add(new RowType.RowField(physical.getName(), dataType.getLogicalType()));
+        }
+        if (fields.isEmpty()) {
+            throw new CatalogException(
+                    "Cannot create a Lance table without physical columns: the schema declares none");
+        }
+        return new RowType(fields);
     }
 
     @Override
