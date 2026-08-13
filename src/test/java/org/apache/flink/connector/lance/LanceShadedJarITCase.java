@@ -25,9 +25,13 @@ import java.io.File;
 import java.lang.reflect.Method;
 import java.net.URL;
 import java.net.URLClassLoader;
+import java.util.Arrays;
+import java.util.List;
+import java.util.jar.JarFile;
+import java.util.stream.Collectors;
+import java.util.zip.ZipEntry;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 /**
@@ -39,21 +43,21 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
  * classloader and asserts the relocation held.
  *
  * <p>The jar path comes from system properties set by failsafe. When they are absent, as in an
- * IDE run, the case is skipped rather than failed.
+ * IDE run, the case is skipped rather than failed. A missing jar when the build did pass the
+ * properties is a failure, not a skip -- shade runs at {@code package}, before this phase.
  */
 @DisplayName("Shaded Jar Relocation Tests")
 class LanceShadedJarITCase {
 
     private static final String SHADED_ARROW_SCHEMA =
             "org.apache.flink.connector.lance.shaded.arrow.vector.types.pojo.Schema";
-    private static final String PLAIN_ARROW_SCHEMA = "org.apache.arrow.vector.types.pojo.Schema";
 
     private static File shadedJar() {
         String dir = System.getProperty("lance.shaded.jar.dir");
         String name = System.getProperty("lance.shaded.jar.name");
         assumeTrue(dir != null && name != null, "shaded jar location not provided by the build");
         File jar = new File(dir, name);
-        assumeTrue(jar.isFile(), "shaded jar not built yet: " + jar);
+        assertThat(jar).as("the build should have produced the shaded jar by now").isFile();
         return jar;
     }
 
@@ -112,12 +116,25 @@ class LanceShadedJarITCase {
     @DisplayName("Arrow is relocated in the shaded jar")
     void testArrowIsRelocated() throws Exception {
         File jar = shadedJar();
-        try (URLClassLoader loader = isolatedLoader(jar)) {
+        try (ShadedJarLoader loader = isolatedLoader(jar)) {
+            // Throws ClassNotFoundException if the relocation stopped happening.
             assertThat(loader.loadClass(SHADED_ARROW_SCHEMA)).isNotNull();
+        }
 
-            assertThatThrownBy(() -> loader.loadClass(PLAIN_ARROW_SCHEMA))
-                    .as("non-relocated Arrow must not be bundled")
-                    .isInstanceOf(ClassNotFoundException.class);
+        // One class is not enough. Relocations get carved out per package often enough --
+        // a JNI package that breaks when its classes move is the usual reason -- and such an
+        // exclusion leaves plain Arrow in the jar while the class above still resolves. So
+        // walk every entry instead of trusting a single probe.
+        try (JarFile entries = new JarFile(jar)) {
+            List<String> plainArrow =
+                    entries.stream()
+                            .map(ZipEntry::getName)
+                            .filter(n -> n.startsWith("org/apache/arrow/") && n.endsWith(".class"))
+                            .limit(10)
+                            .collect(Collectors.toList());
+            assertThat(plainArrow)
+                    .as("non-relocated Arrow classes must not be bundled (first 10 shown)")
+                    .isEmpty();
         }
     }
 
@@ -125,21 +142,23 @@ class LanceShadedJarITCase {
     @DisplayName("Connector signatures reference the relocated Arrow packages")
     void testConnectorSignaturesRelocated() throws Exception {
         File jar = shadedJar();
-        try (URLClassLoader loader = isolatedLoader(jar)) {
+        try (ShadedJarLoader loader = isolatedLoader(jar)) {
             Class<?> converter =
                     loader.loadClass(
                             "org.apache.flink.connector.lance.converter.LanceTypeConverter");
-            Method toArrowSchema = null;
-            for (Method m : converter.getDeclaredMethods()) {
-                if (m.getName().equals("toArrowSchema")) {
-                    toArrowSchema = m;
-                    break;
-                }
-            }
-            assertThat(toArrowSchema).as("toArrowSchema should exist").isNotNull();
-            assertThat(toArrowSchema.getReturnType().getName())
+            List<Method> toArrowSchema =
+                    Arrays.stream(converter.getDeclaredMethods())
+                            .filter(m -> m.getName().equals("toArrowSchema"))
+                            .collect(Collectors.toList());
+
+            assertThat(toArrowSchema).as("toArrowSchema should exist").isNotEmpty();
+            // Every overload, not just whichever one reflection happens to return first.
+            assertThat(toArrowSchema)
                     .as("the return type must be the relocated Arrow Schema")
-                    .isEqualTo(SHADED_ARROW_SCHEMA);
+                    .allSatisfy(
+                            m ->
+                                    assertThat(m.getReturnType().getName())
+                                            .isEqualTo(SHADED_ARROW_SCHEMA));
         }
     }
 }

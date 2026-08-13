@@ -292,8 +292,16 @@
                     <version>3.1.2</version>
                     <configuration>
                         <includes>
+                            <!-- Failsafe's defaults, restated because listing any include
+                                 replaces the whole default set. *IT/IT* are here so a test
+                                 following the more common Maven naming does not go unnoticed. -->
                             <include>**/*ITCase.java</include>
+                            <include>**/IT*.java</include>
+                            <include>**/*IT.java</include>
                         </includes>
+                        <!-- Without this, a pattern that matches nothing exits 0 and a green
+                             build stops proving the integration tests ran at all. -->
+                        <failIfNoTests>true</failIfNoTests>
                         <classesDirectory>${project.build.outputDirectory}</classesDirectory>
                         <systemPropertyVariables>
                             <lance.shaded.jar.dir>${project.build.directory}</lance.shaded.jar.dir>
@@ -497,10 +505,6 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
-            </plugin>
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-failsafe-plugin</artifactId>
             </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>

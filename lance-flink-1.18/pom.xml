@@ -222,6 +222,13 @@
                 </executions>
             </plugin>
 
+            <!-- 只在打 jar 的模块上挂 failsafe：根聚合模块没有测试类，
+                 而 failIfNoTests=true 会让它直接失败。 -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-failsafe-plugin</artifactId>
+            </plugin>
+
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-shade-plugin</artifactId>
