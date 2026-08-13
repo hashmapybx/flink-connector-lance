@@ -98,7 +98,7 @@ public class LanceDynamicTableSource implements ScanTableSource,
     @Override
     public ScanRuntimeProvider getScanRuntimeProvider(ScanContext runtimeProviderContext) {
         RowType rowType = (RowType) physicalDataType.getLogicalType();
-        
+
         // If column pruning applied, build new RowType
         RowType projectedRowType = rowType;
         if (projectedFields != null) {
@@ -109,26 +109,7 @@ public class LanceDynamicTableSource implements ScanTableSource,
             projectedRowType = new RowType(projectedFieldList);
         }
 
-        // Build LanceOptions (apply column pruning and filter conditions)
-        LanceOptions.Builder optionsBuilder = LanceOptions.builder()
-                .path(options.getPath())
-                .readBatchSize(options.getReadBatchSize())
-                .readFilter(buildFilterExpression());
-
-        // Set Limit (if any)
-        if (limit != null) {
-            optionsBuilder.readLimit(limit);
-        }
-
-        // Set columns to read
-        if (projectedFields != null) {
-            List<String> columnNames = Arrays.stream(projectedFields)
-                    .mapToObj(i -> rowType.getFieldNames().get(i))
-                    .collect(Collectors.toList());
-            optionsBuilder.readColumns(columnNames);
-        }
-
-        LanceOptions finalOptions = optionsBuilder.build();
+        LanceOptions finalOptions = buildRuntimeOptions(rowType);
         final RowType finalRowType = projectedRowType;
 
         // Use DataStreamScanProvider
@@ -144,6 +125,46 @@ public class LanceDynamicTableSource implements ScanTableSource,
                 return true; // Lance dataset is bounded
             }
         };
+    }
+
+    /**
+     * Build the {@link LanceOptions} that will actually be handed to the runtime source, applying
+     * projection / limit / filter push-down on top of the original SQL-WITH options.
+     *
+     * <p>Exposed at package scope so unit tests can assert that push-down does not lose any
+     * important options (e.g. time-travel {@code read.version} / {@code read.as-of-timestamp} —
+     * see issue #5).
+     */
+    LanceOptions buildRuntimeOptions(RowType rowType) {
+        LanceOptions.Builder optionsBuilder = LanceOptions.builder()
+                .path(options.getPath())
+                .readBatchSize(options.getReadBatchSize())
+                .readFilter(buildFilterExpression());
+
+        // Carry over time-travel options from the SQL WITH clause (issue #5).
+        // Without this the readVersion / readAsOfTimestamp get dropped when the planner
+        // rebuilds options during projection/filter push-down.
+        if (options.getReadVersion() != null) {
+            optionsBuilder.readVersion(options.getReadVersion());
+        }
+        if (options.getReadAsOfTimestamp() != null) {
+            optionsBuilder.readAsOfTimestamp(options.getReadAsOfTimestamp());
+        }
+
+        // Set Limit (if any)
+        if (limit != null) {
+            optionsBuilder.readLimit(limit);
+        }
+
+        // Set columns to read
+        if (projectedFields != null) {
+            List<String> columnNames = Arrays.stream(projectedFields)
+                    .mapToObj(i -> rowType.getFieldNames().get(i))
+                    .collect(Collectors.toList());
+            optionsBuilder.readColumns(columnNames);
+        }
+
+        return optionsBuilder.build();
     }
 
     @Override

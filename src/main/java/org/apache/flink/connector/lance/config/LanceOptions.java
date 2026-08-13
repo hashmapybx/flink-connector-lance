@@ -86,6 +86,28 @@ public class LanceOptions implements Serializable {
             .noDefaultValue()
             .withDescription("Data filter condition, using SQL WHERE clause syntax");
 
+    /**
+     * Time travel: read a specific historical version of the Lance dataset by version number.
+     * Mutually exclusive with {@link #READ_AS_OF_TIMESTAMP} (version takes precedence if both set).
+     * See issue #5.
+     */
+    public static final ConfigOption<Long> READ_VERSION = ConfigOptions
+            .key("read.version")
+            .longType()
+            .noDefaultValue()
+            .withDescription("Time travel: read the given Lance dataset version. If unset, reads the latest version.");
+
+    /**
+     * Time travel: read the dataset as of the given ISO-8601 timestamp (e.g. {@code 2026-07-01T00:00:00Z}).
+     * The connector resolves this to the newest version whose creation time is &le; the given timestamp.
+     * Ignored if {@link #READ_VERSION} is also set. See issue #5.
+     */
+    public static final ConfigOption<String> READ_AS_OF_TIMESTAMP = ConfigOptions
+            .key("read.as-of-timestamp")
+            .stringType()
+            .noDefaultValue()
+            .withDescription("Time travel: read the dataset as of the given ISO-8601 timestamp. Derives the version by scanning listVersions(). Ignored when read.version is set.");
+
     // ==================== Sink Configuration ====================
 
     /**
@@ -352,6 +374,8 @@ public class LanceOptions implements Serializable {
     private final Long readLimit;
     private final List<String> readColumns;
     private final String readFilter;
+    private final Long readVersion;
+    private final String readAsOfTimestamp;
     private final int writeBatchSize;
     private final WriteMode writeMode;
     private final int writeMaxRowsPerFile;
@@ -377,6 +401,8 @@ public class LanceOptions implements Serializable {
         this.readLimit = builder.readLimit;
         this.readColumns = builder.readColumns;
         this.readFilter = builder.readFilter;
+        this.readVersion = builder.readVersion;
+        this.readAsOfTimestamp = builder.readAsOfTimestamp;
         this.writeBatchSize = builder.writeBatchSize;
         this.writeMode = builder.writeMode;
         this.writeMaxRowsPerFile = builder.writeMaxRowsPerFile;
@@ -417,6 +443,14 @@ public class LanceOptions implements Serializable {
 
     public String getReadFilter() {
         return readFilter;
+    }
+
+    public Long getReadVersion() {
+        return readVersion;
+    }
+
+    public String getReadAsOfTimestamp() {
+        return readAsOfTimestamp;
     }
 
     public int getWriteBatchSize() {
@@ -522,6 +556,12 @@ public class LanceOptions implements Serializable {
         if (config.contains(READ_FILTER)) {
             builder.readFilter(config.get(READ_FILTER));
         }
+        if (config.contains(READ_VERSION)) {
+            builder.readVersion(config.get(READ_VERSION));
+        }
+        if (config.contains(READ_AS_OF_TIMESTAMP)) {
+            builder.readAsOfTimestamp(config.get(READ_AS_OF_TIMESTAMP));
+        }
 
         // Sink configuration
         builder.writeBatchSize(config.get(WRITE_BATCH_SIZE));
@@ -571,6 +611,8 @@ public class LanceOptions implements Serializable {
         private Long readLimit;
         private List<String> readColumns = Collections.emptyList();
         private String readFilter;
+        private Long readVersion;
+        private String readAsOfTimestamp;
         private int writeBatchSize = 1024;
         private WriteMode writeMode = WriteMode.APPEND;
         private int writeMaxRowsPerFile = 1000000;
@@ -612,6 +654,16 @@ public class LanceOptions implements Serializable {
 
         public Builder readFilter(String readFilter) {
             this.readFilter = readFilter;
+            return this;
+        }
+
+        public Builder readVersion(Long readVersion) {
+            this.readVersion = readVersion;
+            return this;
+        }
+
+        public Builder readAsOfTimestamp(String readAsOfTimestamp) {
+            this.readAsOfTimestamp = readAsOfTimestamp;
             return this;
         }
 
@@ -799,6 +851,8 @@ public class LanceOptions implements Serializable {
                 Objects.equals(path, that.path) &&
                 Objects.equals(readColumns, that.readColumns) &&
                 Objects.equals(readFilter, that.readFilter) &&
+                Objects.equals(readVersion, that.readVersion) &&
+                Objects.equals(readAsOfTimestamp, that.readAsOfTimestamp) &&
                 writeMode == that.writeMode &&
                 indexType == that.indexType &&
                 Objects.equals(indexColumn, that.indexColumn) &&
@@ -815,7 +869,8 @@ public class LanceOptions implements Serializable {
         return Objects.hash(path, readBatchSize, readLimit, readColumns, readFilter, writeBatchSize, writeMode,
                 writeMaxRowsPerFile, indexType, indexColumn, indexNumPartitions, indexNumSubVectors,
                 indexNumBits, indexMaxLevel, indexM, indexEfConstruction, vectorColumn, vectorMetric,
-                vectorNprobes, vectorEf, vectorRefineFactor, defaultDatabase, warehouse);
+                vectorNprobes, vectorEf, vectorRefineFactor, defaultDatabase, warehouse,
+                readVersion, readAsOfTimestamp);
     }
 
     @Override
@@ -826,6 +881,8 @@ public class LanceOptions implements Serializable {
                 ", readLimit=" + readLimit +
                 ", readColumns=" + readColumns +
                 ", readFilter='" + readFilter + '\'' +
+                ", readVersion=" + readVersion +
+                ", readAsOfTimestamp='" + readAsOfTimestamp + '\'' +
                 ", writeBatchSize=" + writeBatchSize +
                 ", writeMode=" + writeMode +
                 ", writeMaxRowsPerFile=" + writeMaxRowsPerFile +

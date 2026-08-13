@@ -344,4 +344,56 @@ class LanceSqlITCase {
         LanceVectorSearchFunction function = new LanceVectorSearchFunction();
         assertThat(function).isNotNull();
     }
+
+    // ------------------------------------------------------------------
+    // Regression tests for issue #5: SQL push-down must not drop
+    // read.version / read.as-of-timestamp when the planner rebuilds
+    // LanceOptions inside LanceDynamicTableSource#buildRuntimeOptions.
+    // ------------------------------------------------------------------
+
+    @Test
+    @DisplayName("Regression #5: read.version survives projection push-down")
+    void testReadVersionSurvivesPushDown() {
+        LanceOptions withVersion = LanceOptions.builder()
+                .path(datasetPath)
+                .readVersion(7L)
+                .build();
+        DataType dataType = DataTypes.ROW(
+                DataTypes.FIELD("id", DataTypes.BIGINT()),
+                DataTypes.FIELD("name", DataTypes.STRING()));
+
+        LanceDynamicTableSource source = new LanceDynamicTableSource(withVersion, dataType);
+        // Simulate the planner applying a projection push-down.
+        source.applyProjection(new int[][]{ new int[]{0} });
+
+        RowType rowType = (RowType) dataType.getLogicalType();
+        LanceOptions runtime = source.buildRuntimeOptions(rowType);
+
+        assertThat(runtime.getReadVersion())
+                .as("read.version must be carried into runtime options after projection push-down")
+                .isEqualTo(7L);
+    }
+
+    @Test
+    @DisplayName("Regression #5: read.as-of-timestamp survives projection push-down")
+    void testReadAsOfTimestampSurvivesPushDown() {
+        String ts = "2026-07-28T00:00:00Z";
+        LanceOptions withTs = LanceOptions.builder()
+                .path(datasetPath)
+                .readAsOfTimestamp(ts)
+                .build();
+        DataType dataType = DataTypes.ROW(
+                DataTypes.FIELD("id", DataTypes.BIGINT()),
+                DataTypes.FIELD("name", DataTypes.STRING()));
+
+        LanceDynamicTableSource source = new LanceDynamicTableSource(withTs, dataType);
+        source.applyProjection(new int[][]{ new int[]{1} });
+
+        RowType rowType = (RowType) dataType.getLogicalType();
+        LanceOptions runtime = source.buildRuntimeOptions(rowType);
+
+        assertThat(runtime.getReadAsOfTimestamp())
+                .as("read.as-of-timestamp must be carried into runtime options after push-down")
+                .isEqualTo(ts);
+    }
 }

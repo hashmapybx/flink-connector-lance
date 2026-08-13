@@ -79,6 +79,18 @@ public class LanceDynamicTableFactory implements DynamicTableSourceFactory, Dyna
             .noDefaultValue()
             .withDescription("Data filter condition");
 
+    public static final ConfigOption<Long> READ_VERSION = ConfigOptions
+            .key("read.version")
+            .longType()
+            .noDefaultValue()
+            .withDescription("Time travel: read the given Lance dataset version (issue #5)");
+
+    public static final ConfigOption<String> READ_AS_OF_TIMESTAMP = ConfigOptions
+            .key("read.as-of-timestamp")
+            .stringType()
+            .noDefaultValue()
+            .withDescription("Time travel: read the dataset as of the given ISO-8601 timestamp (issue #5). Ignored when read.version is set.");
+
     public static final ConfigOption<Integer> WRITE_BATCH_SIZE = ConfigOptions
             .key("write.batch-size")
             .intType()
@@ -157,6 +169,8 @@ public class LanceDynamicTableFactory implements DynamicTableSourceFactory, Dyna
         options.add(READ_BATCH_SIZE);
         options.add(READ_COLUMNS);
         options.add(READ_FILTER);
+        options.add(READ_VERSION);
+        options.add(READ_AS_OF_TIMESTAMP);
         options.add(WRITE_BATCH_SIZE);
         options.add(WRITE_MODE);
         options.add(WRITE_MAX_ROWS_PER_FILE);
@@ -215,6 +229,8 @@ public class LanceDynamicTableFactory implements DynamicTableSourceFactory, Dyna
             }
         });
         config.getOptional(READ_FILTER).ifPresent(builder::readFilter);
+        config.getOptional(READ_VERSION).ifPresent(builder::readVersion);
+        config.getOptional(READ_AS_OF_TIMESTAMP).ifPresent(builder::readAsOfTimestamp);
 
         // Sink configuration
         builder.writeBatchSize(config.get(WRITE_BATCH_SIZE));
