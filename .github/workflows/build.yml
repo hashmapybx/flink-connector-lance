@@ -61,49 +61,14 @@ jobs:
           java-version: ${{ matrix.java }}
           cache: maven
 
-      - name: Build and run unit tests (lance-flink-${{ matrix.flink }})
-        run: mvn -B -ntp -am -pl lance-flink-${{ matrix.flink }} verify -DskipITs
-
-      - name: Upload surefire reports on failure
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: surefire-reports-flink${{ matrix.flink }}-jdk${{ matrix.java }}
-          path: '**/target/surefire-reports/**'
-          retention-days: 7
-
-  integration-test:
-    name: IT / Flink ${{ matrix.flink }}
-    runs-on: ubuntu-latest
-    # The integration tests build the shaded jar and drive a real Lance directory
-    # namespace, so they need more headroom than the unit-test jobs.
-    timeout-minutes: 45
-    strategy:
-      fail-fast: false
-      matrix:
-        # One JDK is enough here: the integration tests exercise the connector
-        # against Lance, not the JDK, and the unit-test matrix above already
-        # covers 11/17/21.
-        flink: ["1.18", "1.19", "1.20"]
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up JDK 17
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: "17"
-          cache: maven
-
-      - name: Run integration tests (lance-flink-${{ matrix.flink }})
+      - name: Build and run tests (lance-flink-${{ matrix.flink }})
         run: mvn -B -ntp -am -pl lance-flink-${{ matrix.flink }} verify
 
       - name: Upload test reports on failure
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: it-reports-flink${{ matrix.flink }}
+          name: test-reports-flink${{ matrix.flink }}-jdk${{ matrix.java }}
           path: |
             **/target/surefire-reports/**
             **/target/failsafe-reports/**
