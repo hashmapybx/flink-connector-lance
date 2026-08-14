@@ -73,7 +73,7 @@ class LanceShadedJarITCase {
      * method fails: resolving a signature such as {@code toArrowSchema(RowType)} needs the Flink
      * API, which the jar does not bundle. Delegating everything to the parent is no good either,
      * since parent-first would answer both prefixes from the test classpath, where Arrow is not
-     * relocated — the relocation assertions would then pass or fail on the wrong classes.
+     * relocated, and the relocation assertions would then pass or fail on the wrong classes.
      */
     private static final class ShadedJarLoader extends URLClassLoader {
 

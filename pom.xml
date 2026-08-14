@@ -18,11 +18,13 @@
         <maven.compiler.source>11</maven.compiler.source>
         <maven.compiler.target>11</maven.compiler.target>
 
-        <!-- Arrow 通过反射拿 java.nio.Buffer.address 来做堆外内存访问。JDK 17 起这属于
-             强封装，MemoryUtil 静态初始化会直接抛 RuntimeException，提示补这个 add-opens。
-             JDK 11 上只是一条 illegal reflective access 警告，加了同样无害。
-             surefire / failsafe 默认读 ${argLine}，jacoco:prepare-agent 会把 javaagent
-             追加到这个属性上而不是覆盖，所以两者能共存。 -->
+        <!-- Arrow reaches java.nio.Buffer.address by reflection to get at off-heap memory.
+             JDK 17 encapsulates that, so MemoryUtil's static initializer throws a
+             RuntimeException naming this exact flag. On JDK 11 it is only an
+             illegal-reflective-access warning, and passing the flag there is harmless.
+             surefire and failsafe both read ${argLine} by default, and
+             jacoco:prepare-agent appends its -javaagent to this property rather than
+             replacing it, so the two coexist. -->
         <argLine>--add-opens=java.base/java.nio=ALL-UNNAMED</argLine>
 
         <!-- Lance Flink Connector 版本 -->
@@ -286,13 +288,14 @@
                     <version>3.1.2</version>
                 </plugin>
 
-                <!-- Maven Failsafe 插件（跑 *ITCase 集成测试）
+                <!-- Maven Failsafe (runs the *ITCase integration tests).
 
-                     classesDirectory 指向 target/classes 是必须的：shade 在 package 阶段
-                     把主 artifact 换成了 relocate 过 arrow 的 fat jar，而测试是按未 relocate
-                     的 arrow 签名编译的，failsafe 默认针对主 artifact 跑就会撞
-                     NoSuchMethodError。shaded jar 自身的正确性由 LanceShadedJarITCase
-                     单独校验。 -->
+                     classesDirectory has to point at target/classes. At package time
+                     shade replaces the main artifact with a fat jar in which arrow is
+                     relocated, while the tests are compiled against the plain arrow
+                     signatures, so failsafe running against the main artifact would hit
+                     NoSuchMethodError. The shaded jar is checked separately by
+                     LanceShadedJarITCase. -->
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-failsafe-plugin</artifactId>
