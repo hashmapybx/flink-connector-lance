@@ -19,6 +19,7 @@
 package org.apache.flink.connector.lance.table;
 
 import org.apache.flink.connector.lance.catalog.namespace.LanceNamespaceConfig;
+import org.apache.flink.connector.lance.converter.LanceTypeConverter;
 
 import org.apache.flink.table.catalog.AbstractCatalog;
 import org.apache.flink.table.catalog.CatalogBaseTable;
@@ -29,6 +30,7 @@ import org.apache.flink.table.catalog.CatalogPartition;
 import org.apache.flink.table.catalog.CatalogPartitionSpec;
 import org.apache.flink.table.catalog.CatalogTable;
 import org.apache.flink.table.catalog.ObjectPath;
+import org.apache.flink.table.catalog.ResolvedCatalogTable;
 import org.apache.flink.table.catalog.exceptions.CatalogException;
 import org.apache.flink.table.catalog.exceptions.DatabaseAlreadyExistException;
 import org.apache.flink.table.catalog.exceptions.DatabaseNotEmptyException;
@@ -40,6 +42,8 @@ import org.apache.flink.table.catalog.exceptions.TableNotExistException;
 import org.apache.flink.table.catalog.stats.CatalogColumnStatistics;
 import org.apache.flink.table.catalog.stats.CatalogTableStatistics;
 import org.apache.flink.table.expressions.Expression;
+import org.apache.flink.table.types.DataType;
+import org.apache.flink.table.types.logical.RowType;
 
 import org.lance.namespace.LanceNamespace;
 import org.lance.namespace.model.CreateNamespaceRequest;
@@ -56,9 +60,14 @@ import org.lance.namespace.model.NamespaceExistsRequest;
 import org.lance.namespace.model.TableExistsRequest;
 
 import org.apache.arrow.memory.BufferAllocator;
+import org.apache.arrow.vector.VectorSchemaRoot;
+import org.apache.arrow.vector.ipc.ArrowStreamWriter;
+import org.apache.arrow.vector.types.pojo.Schema;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -337,8 +346,24 @@ public class LanceNamespaceCatalog extends AbstractCatalog {
                             + "Specify the Lance dataset path, e.g. WITH ('path' = '/data/my_dataset')");
         }
 
+        // Serialized before the try below: that catch classifies errors coming back from the
+        // namespace, and wrapping a local schema failure in "Failed to create table" would bury
+        // the message that says what is actually wrong with the schema. The catch here keeps the
+        // method's contract of only throwing CatalogException, since serialization can also fail
+        // with a ValidationException (duplicate column names) or an IllegalStateException (an
+        // Arrow buffer leak detected when the child allocator closes).
+        byte[] arrowIpcSchema;
         try {
-            namespace.createTable(new CreateTableRequest().id(tableId(tablePath)), new byte[0]);
+            arrowIpcSchema = toArrowIpcSchema(table, allocator);
+        } catch (CatalogException e) {
+            throw e;
+        } catch (RuntimeException e) {
+            throw new CatalogException("Cannot build the Arrow schema for table " + tablePath, e);
+        }
+
+        try {
+            namespace.createTable(
+                    new CreateTableRequest().id(tableId(tablePath)), arrowIpcSchema);
         } catch (RuntimeException e) {
             if (isAlreadyExists(e)) {
                 if (!ignoreIfExists) {
@@ -348,6 +373,104 @@ public class LanceNamespaceCatalog extends AbstractCatalog {
             }
             throw new CatalogException("Failed to create table: " + tablePath, e);
         }
+    }
+
+    /**
+     * Serialize a table's schema as an Arrow IPC stream.
+     *
+     * <p>{@code createTable} on the namespace API takes the request plus the table schema as an
+     * Arrow IPC stream; a directory-backed namespace rejects an empty body with {@code
+     * InvalidInputException code=13}, and a schema-only stream with {@code InternalException
+     * code=18}. So the stream carries the schema plus one batch of zero rows: enough for the
+     * namespace to derive the schema, while creating an empty dataset.
+     *
+     * @param table the table whose schema to serialize
+     * @param allocator the allocator backing the Arrow vectors
+     * @return the Arrow IPC stream bytes
+     */
+    static byte[] toArrowIpcSchema(CatalogBaseTable table, BufferAllocator allocator) {
+        Schema arrowSchema;
+        try {
+            arrowSchema = LanceTypeConverter.toArrowSchema(resolveRowType(table));
+        } catch (LanceTypeConverter.UnsupportedTypeException e) {
+            throw new CatalogException(
+                    "Cannot create a Lance table with this schema: " + e.getMessage(), e);
+        }
+
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        // The child allocator attributes any Arrow buffer leak to this method instead of to
+        // close() at the end of the catalog's life. Declared first so it closes last.
+        try (BufferAllocator ipcAllocator =
+                        allocator.newChildAllocator("lance-ipc-schema", 0, Long.MAX_VALUE);
+                VectorSchemaRoot root = VectorSchemaRoot.create(arrowSchema, ipcAllocator);
+                ArrowStreamWriter writer = new ArrowStreamWriter(root, null, out)) {
+            root.setRowCount(0);
+            writer.start();
+            writer.writeBatch();
+            writer.end();
+        } catch (IOException e) {
+            // Defensive: ByteArrayOutputStream never throws here. Two other failures do escape
+            // this clause as RuntimeException, which is why the caller wraps them: a real stream
+            // or channel would surface IO errors through ArrowWriter.close(), and ipcAllocator
+            // .close() throws IllegalStateException on a leaked buffer.
+            throw new CatalogException("Failed to serialize table schema as an Arrow IPC stream", e);
+        }
+        return out.toByteArray();
+    }
+
+    /**
+     * Build a {@link RowType} from a table's physical columns.
+     *
+     * <p>A {@link ResolvedCatalogTable} carries a resolved schema, and {@code
+     * toPhysicalRowDataType()} already drops computed and metadata columns, so that path is used
+     * when available. Flink hands catalogs a resolved table on the SQL DDL path; a programmatic
+     * caller may pass a plain {@link CatalogBaseTable}, which is why the unresolved fallback stays.
+     *
+     * @param table the table to read the schema from
+     * @return the row type of the table's physical columns
+     */
+    static RowType resolveRowType(CatalogBaseTable table) {
+        if (table instanceof ResolvedCatalogTable) {
+            RowType rowType =
+                    (RowType)
+                            ((ResolvedCatalogTable) table)
+                                    .getResolvedSchema()
+                                    .toPhysicalRowDataType()
+                                    .getLogicalType();
+            if (rowType.getFieldCount() == 0) {
+                throw new CatalogException(
+                        "Cannot create a Lance table without physical columns: the schema declares none");
+            }
+            return rowType;
+        }
+
+        List<RowType.RowField> fields = new ArrayList<>();
+        for (org.apache.flink.table.api.Schema.UnresolvedColumn column :
+                table.getUnresolvedSchema().getColumns()) {
+            if (!(column instanceof org.apache.flink.table.api.Schema.UnresolvedPhysicalColumn)) {
+                // Computed and metadata columns are not part of the stored dataset.
+                continue;
+            }
+            org.apache.flink.table.api.Schema.UnresolvedPhysicalColumn physical =
+                    (org.apache.flink.table.api.Schema.UnresolvedPhysicalColumn) column;
+            // getDataType() is declared as AbstractDataType: a column declared with
+            // Schema.column(name, "BIGINT") yields an UnresolvedDataType, which cannot be
+            // resolved without a catalog's type factory.
+            if (!(physical.getDataType() instanceof DataType)) {
+                throw new CatalogException(
+                        "Column '"
+                                + physical.getName()
+                                + "' has an unresolved data type. Declare it with DataTypes.* "
+                                + "or create the table through SQL DDL.");
+            }
+            DataType dataType = (DataType) physical.getDataType();
+            fields.add(new RowType.RowField(physical.getName(), dataType.getLogicalType()));
+        }
+        if (fields.isEmpty()) {
+            throw new CatalogException(
+                    "Cannot create a Lance table without physical columns: the schema declares none");
+        }
+        return new RowType(fields);
     }
 
     @Override
