@@ -138,7 +138,18 @@ class RowDataConverterTest {
             dataVector.setSafe(0, 0.5);
             dataVector.setSafe(1, 1.5);
             dataVector.setSafe(2, 2.5);
+            // Write index 3 before nulling it. On a freshly allocated child the validity
+            // bits are already zero, so setNull on its own would leave the slot merely
+            // unwritten rather than explicitly nulled.
+            dataVector.setSafe(3, 3.5);
             dataVector.setNull(3);
+            // Row 2 is nulled at the parent level, but its own two slots carry live
+            // values. That is not what pins the parent bit (an all-null array is still a
+            // non-null array, so the assertion below reddens either way); it makes the
+            // neighbouring assertions stricter, because a read that drifted into slots 4-5
+            // now sees 4.5/5.5 instead of a conveniently null unwritten slot.
+            dataVector.setSafe(4, 4.5);
+            dataVector.setSafe(5, 5.5);
             listVector.setNotNull(0);
             listVector.setNotNull(1);
             listVector.setNull(2);
@@ -165,10 +176,14 @@ class RowDataConverterTest {
         RowType rowType = RowType.of(new IntType(), new ArrayType(new DoubleType()));
         RowDataConverter converter = new RowDataConverter(rowType);
 
-        // 200 rows x 3 elements = 600 elements against an initial child capacity of 4:
-        // every row past the first writes beyond that capacity, and the child doubles
-        // 4 -> 8 -> ... -> 1024 across the batch, so correctness depends on setSafe's
-        // reallocation copying prior data intact.
+        // 200 rows x 3 elements = 600 elements. setInitialCapacity(4) does not literally
+        // leave the child at 4: allocateNew rounds the 40-byte request up to 64 and then
+        // re-spreads it over data plus validity, landing on 7. Rows 0 and 1 fit in that
+        // (indices 0-5), so the first reallocation happens on row 2, and the child then
+        // grows 7 -> 15 -> 31 -> 63 -> 126 -> 252 -> 504 -> 1008, seven times across the
+        // batch. Correctness therefore depends on setSafe's reallocation copying prior
+        // data intact. Without the setInitialCapacity call the default capacity is 4032,
+        // which swallows all 600 without a single realloc and would make this test vacuous.
         List<RowData> rows = new ArrayList<>(200);
         for (int i = 0; i < 200; i++) {
             rows.add(row(i, new Double[] {i * 3.0, i * 3.0 + 1.0, i * 3.0 + 2.0}));
@@ -178,6 +193,13 @@ class RowDataConverterTest {
             ListVector listVector = (ListVector) root.getVector("f1");
             listVector.getDataVector().setInitialCapacity(4);
 
+            // Pin the premise rather than trusting the arithmetic above: allocate once and
+            // assert the child really does start below 600. If a future Arrow version
+            // rounds differently and the whole batch fits, this reddens instead of quietly
+            // turning the test into a no-op.
+            root.allocateNew();
+            assertThat(listVector.getDataVector().getValueCapacity()).isLessThan(600);
+
             converter.toVectorSchemaRoot(rows, root);
 
             List<RowData> readBack = converter.toRowDataList(root);
@@ -186,6 +208,7 @@ class RowDataConverterTest {
                 ArrayData array = readBack.get(i).getArray(1);
                 assertThat(array.size()).isEqualTo(3);
                 assertThat(array.getDouble(0)).isEqualTo(i * 3.0);
+                assertThat(array.getDouble(1)).isEqualTo(i * 3.0 + 1.0);
                 assertThat(array.getDouble(2)).isEqualTo(i * 3.0 + 2.0);
             }
         }
@@ -210,20 +233,28 @@ class RowDataConverterTest {
             dataVector.setSafe(0, 0.5f);
             dataVector.setSafe(1, 1.5f);
             dataVector.setSafe(2, 2.5f);
+            // See the double case: write before nulling, or the slot is only unwritten.
+            dataVector.setSafe(3, 3.5f);
             dataVector.setNull(3);
+            dataVector.setSafe(4, 4.5f);
+            dataVector.setSafe(5, 5.5f);
             listVector.setNotNull(0);
             listVector.setNotNull(1);
-            root.setRowCount(2);
+            listVector.setNull(2);
+            root.setRowCount(3);
 
             List<RowData> readBack = converter.toRowDataList(root);
 
-            assertThat(readBack).hasSize(2);
+            assertThat(readBack).hasSize(3);
             ArrayData first = readBack.get(0).getArray(0);
+            assertThat(first.size()).isEqualTo(2);
             assertThat(first.getFloat(0)).isEqualTo(0.5f);
             assertThat(first.getFloat(1)).isEqualTo(1.5f);
             ArrayData second = readBack.get(1).getArray(0);
             assertThat(second.getFloat(0)).isEqualTo(2.5f);
             assertThat(second.isNullAt(1)).isTrue();
+
+            assertThat(readBack.get(2).isNullAt(0)).isTrue();
         }
     }
 
