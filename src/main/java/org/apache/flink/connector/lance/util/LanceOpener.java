@@ -58,23 +58,26 @@ public final class LanceOpener {
 
     /** Open a dataset honoring the time-travel options declared in {@code options}. */
     public static Dataset open(String datasetPath, BufferAllocator allocator, LanceOptions options) {
+        // 方案 B：对 tbdsfs/hdfs 等 Hadoop 兼容 scheme，先通过 Hadoop FileSystem 缓存到本地
+        String resolvedPath = LanceHadoopPathResolver.resolveForRead(datasetPath, null, null);
+
         Long explicitVersion = options.getReadVersion();
         String asOf = options.getReadAsOfTimestamp();
 
         if (explicitVersion != null) {
-            LOG.info("Opening Lance dataset {} at version {} (read.version)", datasetPath, explicitVersion);
-            return openAtVersion(datasetPath, allocator, explicitVersion);
+            LOG.info("Opening Lance dataset {} at version {} (read.version)", resolvedPath, explicitVersion);
+            return openAtVersion(resolvedPath, allocator, explicitVersion);
         }
 
         if (asOf != null && !asOf.isEmpty()) {
-            long resolved = resolveVersionForTimestamp(datasetPath, allocator, asOf);
+            long resolved = resolveVersionForTimestamp(resolvedPath, allocator, asOf);
             LOG.info("Opening Lance dataset {} at version {} (resolved from read.as-of-timestamp={})",
-                    datasetPath, resolved, asOf);
-            return openAtVersion(datasetPath, allocator, resolved);
+                    resolvedPath, resolved, asOf);
+            return openAtVersion(resolvedPath, allocator, resolved);
         }
 
-        LOG.debug("Opening Lance dataset {} at latest version (no time-travel options set)", datasetPath);
-        return Dataset.open(datasetPath, allocator);
+        LOG.debug("Opening Lance dataset {} at latest version (no time-travel options set)", resolvedPath);
+        return Dataset.open(resolvedPath, allocator);
     }
 
     private static Dataset openAtVersion(String datasetPath, BufferAllocator allocator, long version) {
