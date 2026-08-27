@@ -323,10 +323,16 @@
                                     <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer"/>
                                 </transformers>
                                 <relocations>
-                                    <relocation>
-                                        <pattern>org.apache.arrow</pattern>
-                                        <shadedPattern>org.apache.flink.connector.lance.shaded.arrow</shadedPattern>
-                                    </relocation>
+                                    <!--
+                                      NOTE: Do NOT relocate org.apache.arrow.
+
+                                      lance-core's Rust JNI hard-codes Arrow C Data Interface
+                                      class names (e.g. org.apache.arrow.c.jni.PrivateData,
+                                      org.apache.arrow.c.Data, org.apache.arrow.c.ArrowArray)
+                                      and resolves them via FindClass() at runtime. Relocating
+                                      org.apache.arrow therefore breaks the JNI bridge and fails
+                                      with: Could not find class Lorg/apache/arrow/c/jni/PrivateData;
+                                    -->
                                 </relocations>
                             </configuration>
                         </execution>
