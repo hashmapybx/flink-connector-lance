@@ -128,7 +128,7 @@ public class LanceSource extends RichParallelSourceFunction<RowData> {
         Path path = Paths.get(datasetPath);
         try {
             // Honor read.version / read.as-of-timestamp for time-travel reads (issue #5).
-            this.dataset = LanceOpener.open(path.toString(), allocator, options);
+            this.dataset = LanceOpener.open(path.toString(), allocator, options, parameters);
         } catch (Exception e) {
             throw new IOException("Cannot open Lance dataset: " + datasetPath, e);
         }

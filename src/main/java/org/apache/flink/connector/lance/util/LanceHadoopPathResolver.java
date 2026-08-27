@@ -78,6 +78,14 @@ public final class LanceHadoopPathResolver {
     /** 每个进程内所有已缓存的源 URI → 本地路径映射；同时兼作锁监视器。 */
     private static final ConcurrentHashMap<String, Object> CACHE_LOCKS = new ConcurrentHashMap<>();
 
+    /**
+     * Lance 的 latest 版本哨兵号（{@code u64::MAX - 1}）。Lance 在 {@code _versions/} 目录下
+     * 用它标记"最新版本"的别名 manifest。该文件并非真实数据，Lance 在缺失时可通过扫描
+     * {@code _versions/} 下的最大版本号确定 latest，因此对它读取失败时可安全跳过。
+     * 部分 tbdsfs 后端会把这个哨兵 manifest 存坏（读时报 input/output error）。
+     */
+    private static final String LATEST_MANIFEST_SENTINEL = "18446744073709551614";
+
     private LanceHadoopPathResolver() {}
 
     /**
@@ -160,6 +168,12 @@ public final class LanceHadoopPathResolver {
     static Configuration buildHadoopConfiguration(Configuration userConf) {
         Configuration conf = userConf != null ? userConf : new Configuration();
 
+        // 显式加载 core-site.xml / hdfs-site.xml。在 Flink YARN TaskManager 容器内，
+        // 由于 Flink 的 child-first 类加载器隔离，new Configuration() 未必能通过
+        // context classloader 加载到宿主机的 core-site.xml，导致 tbdsfs.meta 等配置
+        // 缺失（tbdsfs 的 Go 库会因此报 invalid uri 并 fatal）。这里按标准路径兜底加载。
+        loadHadoopSiteXmls(conf);
+
         // 1. 从系统属性注入 lance.hadoop.* -> hadoop conf key
         java.util.Properties props = System.getProperties();
         for (String key : props.stringPropertyNames()) {
@@ -183,6 +197,39 @@ public final class LanceHadoopPathResolver {
             }
         }
 
+        return conf;
+    }
+
+    /**
+     * 从 Flink 的全局配置构造 Hadoop {@link Configuration}。
+     *
+     * <p>Flink SQL 里通过 {@code SET 'flink.hadoop.xxx' = 'yyy'} 设置的配置会以
+     * {@code flink.hadoop.} 前缀进入 Flink 的 {@code Configuration}。这里把这些
+     * 前缀剥掉后注入 Hadoop {@code Configuration}（例如 {@code flink.hadoop.tbdsfs.meta}
+     * → {@code tbdsfs.meta}）。
+     *
+     * <p>这解决了在 YARN TaskManager 容器内 {@code new Configuration()} 因类加载器
+     * 隔离而加载不到宿主机的 {@code core-site.xml}（进而拿不到 {@code tbdsfs.meta}）
+     * 的问题——tbdsfs 的 Go 库在 {@code meta} 为空时会 fallback 到把 name 当 URI，
+     * 报 {@code invalid uri: /internal} 并直接 fatal 退出。
+     *
+     * @param flinkConf Flink 运行时配置（可为 {@code null}）
+     * @return 注入了 {@code flink.hadoop.*} 配置的 Hadoop {@code Configuration}
+     */
+    public static Configuration buildHadoopConfigurationFromFlink(
+            org.apache.flink.configuration.Configuration flinkConf) {
+        Configuration conf = new Configuration();
+        if (flinkConf == null) {
+            return conf;
+        }
+        for (java.util.Map.Entry<String, String> e : flinkConf.toMap().entrySet()) {
+            String key = e.getKey();
+            if (key != null && key.startsWith("flink.hadoop.")) {
+                String hadoopKey = key.substring("flink.hadoop.".length());
+                conf.set(hadoopKey, e.getValue());
+                LOG.info("Injected Hadoop conf from Flink config: {} = {}", hadoopKey, e.getValue());
+            }
+        }
         return conf;
     }
 
@@ -260,6 +307,44 @@ public final class LanceHadoopPathResolver {
         return scheme != null && LANCE_NATIVE_SCHEMES.contains(scheme.toLowerCase(Locale.ROOT));
     }
 
+    /**
+     * 显式加载 Hadoop 的 {@code core-site.xml} / {@code hdfs-site.xml}。
+     * 用于兜底 Flink YARN 容器内 {@code new Configuration()} 因类加载器隔离而
+     * 加载不到宿主机 site 文件的问题。
+     */
+    private static void loadHadoopSiteXmls(Configuration conf) {
+        java.nio.file.Path confDir = resolveHadoopConfDir();
+        if (confDir == null) {
+            return;
+        }
+        addSiteXmlIfExists(conf, confDir.resolve("core-site.xml"));
+        addSiteXmlIfExists(conf, confDir.resolve("hdfs-site.xml"));
+    }
+
+    private static void addSiteXmlIfExists(Configuration conf, java.nio.file.Path siteXml) {
+        if (Files.isRegularFile(siteXml)) {
+            conf.addResource(new Path(siteXml.toUri()));
+            LOG.info("Explicitly loaded Hadoop site config: {}", siteXml);
+        }
+    }
+
+    /** 探测 Hadoop 配置目录：HADOOP_CONF_DIR → 系统属性 → TBDS 标准路径。 */
+    private static java.nio.file.Path resolveHadoopConfDir() {
+        String env = System.getenv("HADOOP_CONF_DIR");
+        if (env != null && !env.isEmpty()) {
+            return java.nio.file.Paths.get(env);
+        }
+        String prop = System.getProperty("hadoop.conf.dir");
+        if (prop != null && !prop.isEmpty()) {
+            return java.nio.file.Paths.get(prop);
+        }
+        java.nio.file.Path standard = java.nio.file.Paths.get("/usr/local/service/hadoop/etc/hadoop");
+        if (Files.isDirectory(standard)) {
+            return standard;
+        }
+        return null;
+    }
+
     private static java.nio.file.Path resolveCacheRoot(String userSpecified) {
         if (userSpecified != null && !userSpecified.isEmpty()) {
             return java.nio.file.Paths.get(userSpecified);
@@ -297,6 +382,7 @@ public final class LanceHadoopPathResolver {
 
         long fileCount = 0L;
         long byteCount = 0L;
+        int skippedSentinelFiles = 0;
         RemoteIterator<LocatedFileStatus> it = fs.listFiles(srcDir, true);
         while (it.hasNext()) {
             LocatedFileStatus st = it.next();
@@ -306,12 +392,35 @@ public final class LanceHadoopPathResolver {
             java.nio.file.Path dst = destDir.resolve(rel);
             Files.createDirectories(dst.getParent());
             // 使用 copyToLocalFile：deleteSource=false, useRawLocalFileSystem=true 避免 checksum 校验
-            fs.copyToLocalFile(false, srcFile, new Path(dst.toUri()), true);
-            fileCount++;
-            byteCount += st.getLen();
+            try {
+                fs.copyToLocalFile(false, srcFile, new Path(dst.toUri()), true);
+                fileCount++;
+                byteCount += st.getLen();
+            } catch (IOException e) {
+                // latest 哨兵 manifest（u64::MAX-1）只是 latest 版本的别名，损坏/不可读
+                // 不影响 Lance 通过扫描 _versions 目录确定 latest，因此安全跳过。
+                if (isLatestSentinelManifest(rel)) {
+                    LOG.warn("Skipping unreadable latest-sentinel manifest {} (tbdsfs read error: {})",
+                            srcFile, e.getMessage());
+                    skippedSentinelFiles++;
+                } else {
+                    throw e;
+                }
+            }
         }
-        LOG.info("Downloaded lance dataset from {} to {}: {} files, {} bytes",
-                srcDir, destDir, fileCount, byteCount);
+        LOG.info("Downloaded lance dataset from {} to {}: {} files, {} bytes (skipped {} unreadable latest-sentinel manifests)",
+                srcDir, destDir, fileCount, byteCount, skippedSentinelFiles);
+    }
+
+    /**
+     * 判断相对路径 {@code rel} 是否指向 Lance 的 latest 哨兵 manifest
+     * （即 {@code _versions/18446744073709551614.manifest}）。
+     */
+    private static boolean isLatestSentinelManifest(String rel) {
+        if (rel == null) return false;
+        int slash = rel.lastIndexOf('/');
+        String name = slash >= 0 ? rel.substring(slash + 1) : rel;
+        return name.equals(LATEST_MANIFEST_SENTINEL + ".manifest");
     }
 
     /**
