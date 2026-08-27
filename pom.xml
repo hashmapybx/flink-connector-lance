@@ -18,6 +18,15 @@
         <maven.compiler.source>11</maven.compiler.source>
         <maven.compiler.target>11</maven.compiler.target>
 
+        <!-- Arrow reaches java.nio.Buffer.address by reflection to get at off-heap memory.
+             JDK 17 encapsulates that, so MemoryUtil's static initializer throws a
+             RuntimeException naming this exact flag. On JDK 11 it is only an
+             illegal-reflective-access warning, and passing the flag there is harmless.
+             surefire and failsafe both read ${argLine} by default, and
+             jacoco:prepare-agent appends its -javaagent to this property rather than
+             replacing it, so the two coexist. -->
+        <argLine>--add-opens=java.base/java.nio=ALL-UNNAMED</argLine>
+
         <!-- Lance Flink Connector 版本 -->
         <lance-flink.version>0.1.0</lance-flink.version>
 
