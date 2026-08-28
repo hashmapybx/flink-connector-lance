@@ -28,7 +28,9 @@ import org.apache.flink.table.factories.DynamicTableSinkFactory;
 import org.apache.flink.table.factories.DynamicTableSourceFactory;
 import org.apache.flink.table.factories.FactoryUtil;
 
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -187,10 +189,11 @@ public class LanceDynamicTableFactory implements DynamicTableSourceFactory, Dyna
     @Override
     public DynamicTableSource createDynamicTableSource(Context context) {
         FactoryUtil.TableFactoryHelper helper = FactoryUtil.createTableFactoryHelper(this, context);
-        helper.validate();
+        Map<String, String> tableOptions = context.getCatalogTable().getOptions();
+        helper.validateExcept(extractHadoopOptionKeys(tableOptions));
 
         ReadableConfig config = helper.getOptions();
-        LanceOptions options = buildLanceOptions(config);
+        LanceOptions options = buildLanceOptions(config, tableOptions);
 
         return new LanceDynamicTableSource(
                 options,
@@ -201,10 +204,11 @@ public class LanceDynamicTableFactory implements DynamicTableSourceFactory, Dyna
     @Override
     public DynamicTableSink createDynamicTableSink(Context context) {
         FactoryUtil.TableFactoryHelper helper = FactoryUtil.createTableFactoryHelper(this, context);
-        helper.validate();
+        Map<String, String> tableOptions = context.getCatalogTable().getOptions();
+        helper.validateExcept(extractHadoopOptionKeys(tableOptions));
 
         ReadableConfig config = helper.getOptions();
-        LanceOptions options = buildLanceOptions(config);
+        LanceOptions options = buildLanceOptions(config, tableOptions);
 
         return new LanceDynamicTableSink(
                 options,
@@ -213,9 +217,21 @@ public class LanceDynamicTableFactory implements DynamicTableSourceFactory, Dyna
     }
 
     /**
+     * 提取以 {@code hadoop.} 为前缀的选项 key，供 {@code validateExcept} 跳过校验。
+     */
+    private String[] extractHadoopOptionKeys(Map<String, String> tableOptions) {
+        if (tableOptions == null) {
+            return new String[0];
+        }
+        return tableOptions.keySet().stream()
+                .filter(key -> key != null && key.startsWith("hadoop."))
+                .toArray(String[]::new);
+    }
+
+    /**
      * Build LanceOptions from configuration
      */
-    private LanceOptions buildLanceOptions(ReadableConfig config) {
+    private LanceOptions buildLanceOptions(ReadableConfig config, Map<String, String> tableOptions) {
         LanceOptions.Builder builder = LanceOptions.builder();
 
         // Common configuration
@@ -248,6 +264,31 @@ public class LanceDynamicTableFactory implements DynamicTableSourceFactory, Dyna
         builder.vectorMetric(LanceOptions.MetricType.fromValue(config.get(VECTOR_METRIC)));
         builder.vectorNprobes(config.get(VECTOR_NPROBES));
 
+        // Hadoop-family FileSystem 配置（例如 hadoop.tbdsfs.meta），用于 tbdsfs/hdfs 路径解析
+        Map<String, String> hadoopConfig = extractHadoopConfig(tableOptions);
+        if (!hadoopConfig.isEmpty()) {
+            builder.hadoopConfig(hadoopConfig);
+        }
+
         return builder.build();
+    }
+
+    /**
+     * 从表 DDL 的原始 WITH 参数中提取以 {@code hadoop.} 为前缀的配置项，去掉前缀后作为
+     * Hadoop Configuration 的 key/value（例如 {@code 'hadoop.tbdsfs.meta' = 'zk://...'}
+     * → {@code tbdsfs.meta = zk://...}）。用于绕过集群部分节点 core-site.xml 缺配置的问题。
+     */
+    private Map<String, String> extractHadoopConfig(Map<String, String> tableOptions) {
+        Map<String, String> result = new HashMap<>();
+        if (tableOptions == null) {
+            return result;
+        }
+        for (Map.Entry<String, String> entry : tableOptions.entrySet()) {
+            String key = entry.getKey();
+            if (key != null && key.startsWith("hadoop.") && entry.getValue() != null) {
+                result.put(key.substring("hadoop.".length()), entry.getValue());
+            }
+        }
+        return result;
     }
 }

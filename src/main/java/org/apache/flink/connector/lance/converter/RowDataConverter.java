@@ -277,13 +277,13 @@ public class RowDataConverter implements Serializable {
             }
             return new GenericArrayData(values);
         } else if (elementType instanceof DoubleType) {
-            Double8Vector double8Vector = (Double8Vector) dataVector;
+            Float8Vector float8Vector = (Float8Vector) dataVector;
             Double[] values = new Double[size];
             for (int i = 0; i < size; i++) {
-                if (double8Vector.isNull(startIndex + i)) {
+                if (float8Vector.isNull(startIndex + i)) {
                     values[i] = null;
                 } else {
-                    values[i] = double8Vector.get(startIndex + i);
+                    values[i] = float8Vector.get(startIndex + i);
                 }
             }
             return new GenericArrayData(values);
@@ -324,25 +324,6 @@ public class RowDataConverter implements Serializable {
 
         throw new LanceTypeConverter.UnsupportedTypeException(
                 "Unsupported array element type: " + elementType.getClass().getSimpleName());
-    }
-
-    /**
-     * Internal class for handling Double type Vector (alias for Float8Vector)
-     */
-    private static class Double8Vector {
-        private final Float8Vector vector;
-
-        Double8Vector(FieldVector vector) {
-            this.vector = (Float8Vector) vector;
-        }
-
-        boolean isNull(int index) {
-            return vector.isNull(index);
-        }
-
-        double get(int index) {
-            return vector.get(index);
-        }
     }
 
     /**

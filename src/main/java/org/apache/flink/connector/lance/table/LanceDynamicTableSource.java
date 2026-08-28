@@ -141,6 +141,11 @@ public class LanceDynamicTableSource implements ScanTableSource,
                 .readBatchSize(options.getReadBatchSize())
                 .readFilter(buildFilterExpression());
 
+        // 携带 hadoop.* 配置（如 tbdsfs.meta），避免投影/过滤下推重建 options 时丢失
+        if (options.getHadoopConfig() != null && !options.getHadoopConfig().isEmpty()) {
+            optionsBuilder.hadoopConfig(options.getHadoopConfig());
+        }
+
         // Carry over time-travel options from the SQL WITH clause (issue #5).
         // Without this the readVersion / readAsOfTimestamp get dropped when the planner
         // rebuilds options during projection/filter push-down.

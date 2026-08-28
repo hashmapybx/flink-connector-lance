@@ -25,7 +25,9 @@ import org.apache.flink.configuration.Configuration;
 import java.io.Serializable;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
 /**
@@ -394,6 +396,7 @@ public class LanceOptions implements Serializable {
     private final Integer vectorRefineFactor;
     private final String defaultDatabase;
     private final String warehouse;
+    private final Map<String, String> hadoopConfig;
 
     private LanceOptions(Builder builder) {
         this.path = builder.path;
@@ -421,6 +424,9 @@ public class LanceOptions implements Serializable {
         this.vectorRefineFactor = builder.vectorRefineFactor;
         this.defaultDatabase = builder.defaultDatabase;
         this.warehouse = builder.warehouse;
+        this.hadoopConfig = builder.hadoopConfig == null
+                ? Collections.emptyMap()
+                : Collections.unmodifiableMap(new HashMap<>(builder.hadoopConfig));
     }
 
     // ==================== Getter Methods ====================
@@ -523,6 +529,16 @@ public class LanceOptions implements Serializable {
 
     public String getWarehouse() {
         return warehouse;
+    }
+
+    /**
+     * Extra Hadoop configuration key/value pairs (e.g. {@code tbdsfs.meta}) that should be
+     * injected into the Hadoop {@link org.apache.hadoop.conf.Configuration} used to resolve
+     * Hadoop-family dataset paths (tbdsfs/hdfs). Populated from SQL {@code WITH} options
+     * prefixed with {@code hadoop.}.
+     */
+    public Map<String, String> getHadoopConfig() {
+        return hadoopConfig;
     }
 
     // ==================== Builder ====================
@@ -631,6 +647,7 @@ public class LanceOptions implements Serializable {
         private Integer vectorRefineFactor;
         private String defaultDatabase = "default";
         private String warehouse;
+        private Map<String, String> hadoopConfig;
 
         public Builder path(String path) {
             this.path = path;
@@ -754,6 +771,11 @@ public class LanceOptions implements Serializable {
 
         public Builder warehouse(String warehouse) {
             this.warehouse = warehouse;
+            return this;
+        }
+
+        public Builder hadoopConfig(Map<String, String> hadoopConfig) {
+            this.hadoopConfig = hadoopConfig;
             return this;
         }
 
